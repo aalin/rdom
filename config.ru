@@ -182,7 +182,7 @@ class App
       session.send([:callback, callback_id, payload])
     end
 
-    Protocol::HTTP::Response[204, {} []]
+    Protocol::HTTP::Response[204, {}, []]
   end
 
   def origin_header(request) =
