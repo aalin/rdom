@@ -1,0 +1,7 @@
+# flyctl launch added from .gitignore
+**/vendor
+
+vendor
+fly.toml
+Dockerfile
+.git
