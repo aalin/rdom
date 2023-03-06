@@ -99,41 +99,11 @@ class App
       handle_options(request)
     in "/.rdom" if request.method == "GET"
       handle_stream(request)
-    in "/.rdom" if request.method == "PUT"
-      handle_callback(request)
     in "/.rdom" if request.method == "POST"
-      handle_post(request)
+      handle_callback(request)
     else
       handle_404(request)
     end
-  end
-
-  def handle_post(request)
-    session_id = request.headers[SESSION_ID_HEADER_NAME].to_s
-
-    session = @sessions.fetch(session_id) do
-      Console.logger.error(self, "Could not find session #{session_id.inspect}")
-
-      return Protocol::HTTP::Response[
-        404,
-        origin_header(request),
-        ["Could not find session #{session_id.inspect}"]
-      ]
-    end
-
-    request.body.each do |chunk|
-      JSON.parse(chunk, symbolize_names: true) => [
-        callback_id,
-        payload,
-      ]
-      session.send([:callback, callback_id, payload])
-    end
-
-    Protocol::HTTP::Response[
-      200,
-      { "content-type" => "text/plain; charset-utf-8" },
-      ["done"]
-    ]
   end
 
   def handle_index(_) =
@@ -153,35 +123,12 @@ class App
 
   def handle_options(request)
     headers = {
-      "access-control-allow-methods" => "GET, PUT, POST, OPTIONS",
+      "access-control-allow-methods" => "GET, POST, OPTIONS",
       "access-control-allow-headers" => "#{SESSION_ID_HEADER_NAME}, content-type, accept",
       **origin_header(request),
     }
 
     Protocol::HTTP::Response[204, headers, []]
-  end
-
-  def handle_callback(request)
-    session_id = request.headers[SESSION_ID_HEADER_NAME].to_s
-
-    JSON.parse(request.body.read, symbolize_names: true) => [
-      callback_id,
-      payload,
-    ]
-
-    session = @sessions.fetch(session_id) do
-      Console.logger.error(self, "Could not find session #{session_id}")
-
-      return Protocol::HTTP::Response[
-        404,
-        origin_header(request),
-        ["Could not find session #{session_id}"]
-      ]
-    end
-
-    session.send([:callback, callback_id, payload])
-
-    Protocol::HTTP::Response[204, origin_header(request), []]
   end
 
   def handle_stream(request, task: Async::Task.current)
@@ -214,6 +161,30 @@ class App
     ]
   end
 
+  def handle_callback(request)
+    session_id = request.headers[SESSION_ID_HEADER_NAME].to_s
+
+    session = @sessions.fetch(session_id) do
+      Console.logger.error(self, "Could not find session #{session_id.inspect}")
+
+      return Protocol::HTTP::Response[
+        404,
+        origin_header(request),
+        ["Could not find session #{session_id.inspect}"]
+      ]
+    end
+
+    request.body.each do |chunk|
+      JSON.parse(chunk, symbolize_names: true) => [
+        callback_id,
+        payload,
+      ]
+      session.send([:callback, callback_id, payload])
+    end
+
+    Protocol::HTTP::Response[204, {} []]
+  end
+
   def origin_header(request) =
     { "access-control-allow-origin" => request.headers["origin"] }
 
@@ -244,10 +215,10 @@ def setup_local_certificate(endpoint)
   Async::IO::SSLEndpoint.new(endpoint, ssl_context: context)
 end
 
-
 endpoint = Async::HTTP::Endpoint.parse(
   ENV.fetch("ENDPOINT", "https://localhost:8080")
 )
+
 url = endpoint.url
 
 if url.scheme == "https" && url.hostname == "localhost"
