@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module VDOM
   module Reactively
     # This module is a port of https://github.com/modderme123/reactively,

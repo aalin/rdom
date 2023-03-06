@@ -1,11 +1,13 @@
+# frozen_string_literal: true
+
 require "bundler/setup"
-require 'async'
-require 'async/http/endpoint'
-require 'async/http/protocol/response'
-require 'async/http/server'
-require 'async/io/host_endpoint'
-require 'async/io/ssl_endpoint'
-require 'localhost'
+require "async"
+require "async/http/endpoint"
+require "async/http/protocol/response"
+require "async/http/server"
+require "async/io/host_endpoint"
+require "async/io/ssl_endpoint"
+require "localhost"
 
 require_relative "lib/vdom"
 

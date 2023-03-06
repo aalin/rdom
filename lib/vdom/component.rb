@@ -1,14 +1,14 @@
+# frozen_string_literal: true
+
 require_relative "transform"
 require_relative "descriptor"
 require_relative "reactively"
 
 module VDOM
   module Component
-    class State
-    end
-
     class Base
       H = VDOM::Descriptor
+
       include Reactively::Helpers
 
       def self.import(filename)
@@ -18,32 +18,23 @@ module VDOM
 
       def self.title = name[/[^:]+\z/]
 
-      def initialize(**)
-      end
+      def initialize(**) = nil
 
-      def state
-        @state ||= {}
-      end
+      def state = @state ||= {}
+      def props = @props ||= {}
 
-      def props
-        @props ||= {}
-      end
-
-      def update(&)
-        yield
-        rerender!
-      end
-
-      def mount
-      end
-
-      def render
-      end
+      def mount = nil
+      def render = nil
 
       private
 
       def async(task: Async::Task.current, &)
         task.async(&)
+      end
+
+      def update(&)
+        yield
+        rerender!
       end
 
       def rerender!

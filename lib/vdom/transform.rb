@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "syntax_tree"
 require "syntax_tree/visitor/mutation_visitor"
 
