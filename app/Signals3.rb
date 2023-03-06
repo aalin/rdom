@@ -6,7 +6,7 @@ def render
   count = signal(0)
 
   words = computed do
-    WORDS.select { _1.length <= count.value }.join
+    WORDS.select { _1.length <= count.value }.join.rstrip
   end
 
   H[:article,

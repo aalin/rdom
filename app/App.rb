@@ -5,6 +5,7 @@ AutoCounter = import("AutoCounter.rb")
 Signals = import("Signals.rb")
 Signals2 = import("Signals2.rb")
 Signals3 = import("Signals3.rb")
+Signals4 = import("Signals4.rb")
 
 PAGES = [
   StartPage,
@@ -14,6 +15,7 @@ PAGES = [
   Signals,
   Signals2,
   Signals3,
+  Signals4,
 ]
 
 def initialize(**)

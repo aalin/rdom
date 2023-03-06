@@ -82,7 +82,12 @@ class Patcher {
     const patchFn = PatchFunctions[type]
 
     if (patchFn) {
-      patchFn.apply(this, args)
+      console.log('Applying', type, args)
+      try {
+        patchFn.apply(this, args)
+      } catch (e) {
+        console.error(e)
+      }
       return
     }
 
@@ -111,10 +116,22 @@ const PatchFunctions = {
     )
   },
   RemoveChild(parentId, id) {
-    this.nodes.get(parentId).removeChild(this.nodes.get(id))
+    const child = this.nodes.get(id)
+    if (!child) return
+
+    const parent = this.nodes.get(parentId)
+    if (!parent) return
+
+    if (child.parent == parent) {
+      parent.removeChild(child)
+    }
   },
   RemoveNode(id) {
-    this.nodes.get(id).remove()
+    const node = this.nodes.get(id)
+    if (!node) return
+    if (node.remove) {
+      node.remove()
+    }
     this.nodes.delete(id)
   },
   CreateTextNode(id, content) {
@@ -175,10 +192,13 @@ const PatchFunctions = {
     )
   },
   RemoveHandler(id, event, callbackId) {
-    nodes.get(id).removeEventListener(
+    this.nodes.get(id).removeEventListener(
       event.replace(/^on/, ""),
       this.nodes.get(callbackId),
     )
     this.nodes.delete(callbackId)
+  },
+  Ping(time) {
+    console.info("Ping", time)
   }
 }

@@ -6,9 +6,9 @@ require "async"
 require "async/barrier"
 require "async/condition"
 require "async/queue"
-require "diff/lcs"
 require_relative "patches"
 require_relative "descriptor"
+require_relative "text_diff"
 
 module VDOM
   module Nodes
@@ -79,9 +79,9 @@ module VDOM
       def running? =
         !@task&.stopped?
       def batch(&) =
-        running? && @parent&.batch(&)
+        @parent&.batch(&)
       def patch(patch) =
-        running? && @parent&.patch(patch)
+        @parent&.patch(patch)
       def get_slot(name) =
         @parent.get_slot(name)
       def callbacks =
@@ -90,14 +90,21 @@ module VDOM
         @parent&.mount_dom_node(id, &)
     end
 
-    class VText < Base
+    class VNode < Base
+      def generate_id =
+        SecureRandom.alphanumeric(5)
+    end
+
+    class VText < VNode
       def run(content)
         with_text_node(content.to_s) do |id|
           mount_dom_node(id) do
             receive do |new_content|
-              new_content = new_content.to_s
-              update_text(id, content, new_content)
-              content = new_content
+              content = TextDiff.diff(
+                id,
+                content,
+                new_content.to_s
+              ) { patch(_1) }
             end
           end
         end
@@ -105,42 +112,11 @@ module VDOM
 
       private
 
-      def with_text_node(content, id: SecureRandom.alphanumeric(5))
+      def with_text_node(content, id: generate_id)
         patch(Patches::CreateTextNode[id, content])
         yield id
       ensure
         patch(Patches::RemoveNode[id])
-      end
-
-      def update_text(id, seq1, seq2)
-        offset = 0
-
-        patches = Diff::LCS.diff(seq1, seq2)
-
-        patches.each do |changes|
-          deleting = changes.select(&:deleting?)
-          inserting = changes.reject(&:deleting?)
-          replacement = inserting.map(&:element).join
-
-          if deleting.empty?
-            beginning = inserting.first.position.to_i + offset
-            patch(Patches::InsertData[id, beginning, replacement])
-            next
-          end
-
-          beginning = deleting.first.position.to_i + offset
-          ending = deleting.last.position.to_i + offset
-
-          size = ending - beginning
-          offset += replacement.length - size
-
-          if inserting.empty?
-            patch(Patches::DeleteData[id, beginning, size + 1])
-            next
-          end
-
-          patch(Patches::ReplaceData[id, beginning, size + 1, replacement])
-        end
       end
     end
 
@@ -226,7 +202,7 @@ module VDOM
 
     end
 
-    class VFragment < Base
+    class VFragment < VNode
       def run(descriptors)
         with_fragment do |id|
           VChildren.run(id, descriptors) do |children|
@@ -239,7 +215,7 @@ module VDOM
         end
       end
 
-      def with_fragment(id: SecureRandom.alphanumeric(5))
+      def with_fragment(id: generate_id)
         patch(Patches::CreateDocumentFragment[id])
         yield id
       ensure
@@ -247,7 +223,7 @@ module VDOM
       end
     end
 
-    class VElement < Base
+    class VElement < VNode
       def run(descriptor)
         with_element(descriptor.type) do |id|
           VAttributes.run(id, descriptor.props) do |attributes|
@@ -264,7 +240,7 @@ module VDOM
         end
       end
 
-      def with_element(type, id: SecureRandom.alphanumeric(5))
+      def with_element(type, id: generate_id)
         patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
         yield id
       ensure
@@ -275,8 +251,6 @@ module VDOM
     class VAttributes < Base
       class VAttr < Base
         def run(element_id, name, value)
-          name = name.to_s.tr("_", "-")
-
           loop do
             catch do |value_changed|
               update_attribute(element_id, name, value) do
@@ -318,8 +292,7 @@ module VDOM
 
       class VCallback < Base
         def run(element_id, name, handler)
-          name = name.to_s.tr("_", "-")
-          id = SecureRandom.alphanumeric(16)
+          id = SecureRandom.alphanumeric(32)
 
           callbacks.store(id, handler)
 
@@ -337,8 +310,6 @@ module VDOM
       class VStyles < Base
         class VStyle < Base
           def run(element_id, name, value)
-            name = name.to_s.tr("_", "-").freeze
-
             patch(Patches::SetCSSProperty[element_id, name, value.to_s])
 
             receive do |new_value|
@@ -371,7 +342,7 @@ module VDOM
               old.resume(value)
               [name, old]
             else
-              [name, VStyle.start(element_id, name.to_s, value)]
+              [name, VStyle.start(element_id, name.to_s.tr("_", "-"), value)]
             end
           end.to_h
         end
@@ -394,7 +365,7 @@ module VDOM
             old.resume(value)
             [name, old]
           else
-            [name, attr_node_class(name).start(element_id, name.to_s, value)]
+            [name, attr_node_class(name).start(element_id, name.to_s.tr("_", "-"), value)]
           end
         end.to_h
       end
@@ -439,7 +410,6 @@ module VDOM
         in [*many] then many
         end
       end
-
 
       def descriptor_to_node_type(descriptor)
         case descriptor
@@ -560,7 +530,6 @@ module VDOM
             _1 in Descriptor[slot:] if slot
           end
       end
-
 
       def group_descriptors_by_slots(descriptors)
         descriptors.group_by do |descriptor|

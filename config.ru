@@ -11,8 +11,6 @@ require "localhost"
 
 require_relative "lib/vdom"
 
-MyComponent = VDOM::Component.load_file("app/MyComponent.rb")
-
 class Session
   attr_reader :id
 
@@ -28,7 +26,7 @@ class Session
   def take =
     @output.dequeue
 
-  def run(task: Async::Task.current)
+  def run(component, task: Async::Task.current)
     VDOM.run(session_id: self.id) do |vroot|
       task.async do
         loop do
@@ -50,6 +48,15 @@ class Session
       end
 
       task.async do
+        loop do
+          sleep 5
+          @output.enqueue(
+            VDOM::Patches.serialize(VDOM::Patches::Ping[Process.clock_gettime(Process::CLOCK_MONOTONIC)])
+          )
+        end
+      end
+
+      task.async do
         while patch = vroot.take
           @output.enqueue(VDOM::Patches.serialize(patch))
         end
@@ -59,7 +66,7 @@ class Session
         @stop.signal
       end
 
-      vroot.resume(VDOM::Descriptor[MyComponent])
+      vroot.resume(VDOM::Descriptor[component])
 
       @stop.wait
     ensure
@@ -69,7 +76,8 @@ class Session
 end
 
 class App
-  def initialize
+  def initialize(app)
+    @app = app
     @sessions = {}
   end
 
@@ -101,9 +109,7 @@ class App
   def handle_favicon(_) =
     send_file("favicon.png", "image/png")
   def handle_script(request) =
-    send_file("main.js", "application/javascript; charset=utf-8", {
-      "access-control-allow-origin" => request.headers["origin"],
-    })
+    send_file("main.js", "application/javascript; charset=utf-8", origin_header(request))
 
   def handle_404(request)
     Protocol::HTTP::Response[
@@ -114,15 +120,13 @@ class App
   end
 
   def handle_options(request)
-    Protocol::HTTP::Response[
-      204,
-      {
-        "access-control-allow-methods" => "GET, PUT, OPTIONS",
-        "access-control-allow-origin" => request.headers["origin"],
-        "access-control-allow-headers" => "x-rdom-session-id, content-type, accept",
-      },
-      [""]
-    ]
+    headers = {
+      "access-control-allow-methods" => "GET, PUT, OPTIONS",
+      "access-control-allow-headers" => "x-rdom-session-id, content-type, accept",
+      **origin_header(request),
+    }
+
+    Protocol::HTTP::Response[204, headers, []]
   end
 
   def handle_callback(request)
@@ -132,17 +136,19 @@ class App
       payload,
     ]
 
-    @sessions
-      .fetch(session_id)
-      .send([:callback, callback_id, payload])
+    session = @sessions.fetch(session_id) do
+      Console.logger.error(self, "Could not find session #{session_id}")
 
-    Protocol::HTTP::Response[
-      204,
-      {
-        "access-control-allow-origin" => request.headers["origin"],
-      },
-      [""]
-    ]
+      return Protocol::HTTP::Response[
+        404,
+        origin_header(request),
+        ["Could not find session #{session_id}"]
+      ]
+    end
+
+    session.send([:callback, callback_id, payload])
+
+    Protocol::HTTP::Response[204, origin_header(request), []]
   end
 
   def handle_stream(request, task: Async::Task.current)
@@ -159,7 +165,7 @@ class App
         end
       end
 
-      session.run
+      session.run(@app)
     ensure
       @sessions.delete(session.id)
     end
@@ -169,11 +175,14 @@ class App
       {
         "content-type" => "x-rdom/json-stream",
         "x-rdom-session-id" => session.id,
-        "access-control-allow-origin" => request.headers["origin"],
+        **origin_header(request),
       },
       body
     ]
   end
+
+  def origin_header(request) =
+    { "access-control-allow-origin" => request.headers["origin"] }
 
   def send_file(filename, content_type, headers = {})
     path = File.join(
@@ -214,8 +223,10 @@ end
 
 puts "Starting server on #{url}"
 
+app = VDOM::Component.load_file("app/App.rb")
+
 server = Async::HTTP::Server.new(
-  App.new,
+  App.new(app),
   endpoint,
   scheme: url.scheme,
   protocol: Async::HTTP::Protocol::HTTP2,

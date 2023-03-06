@@ -28,6 +28,8 @@ module VDOM
     InsertData = Data.define(:id, :offset, :data)
     DeleteData = Data.define(:id, :offset, :size)
 
+    Ping = Data.define(:time)
+
     def self.serialize(patch)
       [patch.class.name[/[^:]+\z/], *patch.deconstruct]
     end
