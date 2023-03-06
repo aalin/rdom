@@ -1,3 +1,7 @@
+const DEFAULT_ENDPOINT = "/.rdom"
+const SESSION_ID_HEADER = "x-rdom-session-id"
+const STREAM_MIME_TYPE = "x-rdom/json-stream"
+
 customElements.define(
   "vdom-root",
   class VDOMRoot extends HTMLElement {
@@ -5,31 +9,56 @@ customElements.define(
       super();
 
       this.start(
+        this.getAttribute("endpoint") || DEFAULT_ENDPOINT,
         this.attachShadow({ mode: "open" })
       )
     }
 
-    async start(root) {
-      const res = await fetch(
-        "/stream",
-        { method: "POST" },
-      );
+    async start(endpoint, root) {
+      const res = await fetch(endpoint, {
+        method: "GET",
+        headers: new Headers({ "accept": STREAM_MIME_TYPE }),
+        credentials: "omit"
+      });
 
-      const sessionId = res.headers.get("x-rdom-session-id")
+      if (!res.ok) {
+        alert("Connection failed!")
+        console.error(res);
+        throw new Error("Res was not ok.");
+      }
+
+      const contentType = res.headers.get("content-type");
+
+      if (contentType !== STREAM_MIME_TYPE) {
+        alert(`Unexpected content type: ${contentType}`)
+        console.error(res);
+        throw new Error(`Unexpected content type: ${contentType}`)
+      }
+
+      const sessionId = res.headers.get(SESSION_ID_HEADER);
+
+      if (!sessionId) {
+        alert(`Missing session id`)
+        console.error(res);
+        throw new Error(`Missing session id`)
+      }
+
+      const patcher = new Patcher({
+        root,
+        sessionId,
+        endpoint,
+      })
 
       res.body
         .pipeThrough(new TextDecoderStream())
         .pipeThrough(initJSONDecoder())
-        .pipeTo(initPatcherStream({
-          nodes: new Map(),
-          root,
-          sessionId,
-        }))
+        .pipeTo(patcher.getWriter())
     }
   }
 );
 
 function initJSONDecoder() {
+  // This function is based on https://rob-blackbourn.medium.com/beyond-eventsource-streaming-fetch-with-readablestream-5765c7de21a1#6c5e
   return new TransformStream({
     start(controller) {
       controller.buf = ''
@@ -38,7 +67,6 @@ function initJSONDecoder() {
 
     transform(chunk, controller) {
       controller.buf += chunk
-      console.log({chunk})
 
       while (controller.pos < controller.buf.length) {
         if (controller.buf[controller.pos] === '\n') {
@@ -54,24 +82,34 @@ function initJSONDecoder() {
   })
 }
 
-function initPatcherStream(app) {
-  return new WritableStream({
-    write(message) {
-      console.log(message)
-      const [type, ...args] = message;
-      const fn = functions[type]
+class Patcher {
+  constructor({ endpoint, sessionId, root }) {
+    this.endpoint = endpoint
+    this.sessionId = sessionId
+    this.root = root
+    this.nodes = new Map()
+  }
 
-      if (!fn) {
-        console.error("Not implemented:", type)
-        return
-      }
+  apply(patch) {
+    const [type, ...args] = patch
+    const patchFn = PatchFunctions[type]
 
-      fn.apply(app, args)
+    if (patchFn) {
+      patchFn.apply(this, args)
+      return
     }
-  })
+
+    console.error("Patch not implemented:", type)
+  }
+
+  getWriter() {
+    return new WritableStream({
+      write: this.apply.bind(this)
+    })
+  }
 }
 
-const functions = {
+const PatchFunctions = {
   CreateRoot(sessionId) {
     this.nodes.set(null, this.root);
   },
@@ -136,12 +174,13 @@ const functions = {
               value: e.target.value
             }
           };
-          fetch("/callback", {
-            method: "POST",
+          fetch(this.endpoint, {
+            method: "PUT",
             headers: new Headers({
               "content-type": "application/json"
             }),
-            body: JSON.stringify([this.sessionId, callbackId, payload])
+            credentials: "omit",
+            body: JSON.stringify([this.sessionId, callbackId, payload]),
           })
         }
       )

@@ -81,13 +81,13 @@ class App
     case request.path
     in "/"
       handle_index(request)
-    in "/main.js"
-      handle_script(request)
     in "/favicon.ico"
       handle_favicon(request)
-    in "/stream"
+    in "/.rdom.js"
+      handle_script(request)
+    in "/.rdom" if request.method == "GET"
       handle_stream(request)
-    in "/callback"
+    in "/.rdom" if request.method == "PUT"
       handle_callback(request)
     else
       handle_404(request)
@@ -185,10 +185,11 @@ endpoint = Async::HTTP::Endpoint.parse(
 )
 url = endpoint.url
 
-
 if url.scheme == "https" && url.hostname == "localhost"
   endpoint = setup_local_certificate(endpoint)
 end
+
+puts "Starting server on #{url}"
 
 server = Async::HTTP::Server.new(
   App.new,
