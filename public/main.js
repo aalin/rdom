@@ -7,18 +7,17 @@ customElements.define(
   class VDOMRoot extends HTMLElement {
     constructor() {
       super();
-
-      this.start(
-        this.getAttribute("endpoint") || DEFAULT_ENDPOINT,
-        this.attachShadow({ mode: "open" })
-      )
+      this.attachShadow({ mode: "open" })
     }
 
-    async start(endpoint, root) {
+    async connectedCallback() {
+      const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT
+
       const res = await fetch(endpoint, {
         method: "GET",
+        mode: "cors",
         headers: new Headers({ "accept": STREAM_MIME_TYPE }),
-        credentials: "omit"
+        credentials: "same-origin"
       });
 
       if (!res.ok) {
@@ -35,19 +34,7 @@ customElements.define(
         throw new Error(`Unexpected content type: ${contentType}`)
       }
 
-      const sessionId = res.headers.get(SESSION_ID_HEADER);
-
-      if (!sessionId) {
-        alert(`Missing session id`)
-        console.error(res);
-        throw new Error(`Missing session id`)
-      }
-
-      const patcher = new Patcher({
-        root,
-        sessionId,
-        endpoint,
-      })
+      const patcher = new Patcher(this.shadowRoot, endpoint)
 
       res.body
         .pipeThrough(new TextDecoderStream())
@@ -83,9 +70,9 @@ function initJSONDecoder() {
 }
 
 class Patcher {
-  constructor({ endpoint, sessionId, root }) {
+  constructor(root, endpoint) {
     this.endpoint = endpoint
-    this.sessionId = sessionId
+    this.sessionId = null
     this.root = root
     this.nodes = new Map()
   }
@@ -111,6 +98,7 @@ class Patcher {
 
 const PatchFunctions = {
   CreateRoot(sessionId) {
+    this.sessionId = sessionId
     this.nodes.set(null, this.root);
   },
   CreateElement(id, type) {
@@ -179,7 +167,7 @@ const PatchFunctions = {
             headers: new Headers({
               "content-type": "application/json"
             }),
-            credentials: "omit",
+            mode: "cors",
             body: JSON.stringify([this.sessionId, callbackId, payload]),
           })
         }

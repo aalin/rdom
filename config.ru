@@ -85,6 +85,8 @@ class App
       handle_favicon(request)
     in "/.rdom.js"
       handle_script(request)
+    in "/.rdom" if request.method == "OPTIONS"
+      handle_options(request)
     in "/.rdom" if request.method == "GET"
       handle_stream(request)
     in "/.rdom" if request.method == "PUT"
@@ -98,14 +100,28 @@ class App
     send_file("index.html", "text/html; charset=utf-8")
   def handle_favicon(_) =
     send_file("favicon.png", "image/png")
-  def handle_script(_) =
-    send_file("main.js", "application/javascript; charset=utf-8")
+  def handle_script(request) =
+    send_file("main.js", "application/javascript; charset=utf-8", {
+      "access-control-allow-origin" => request.headers["origin"],
+    })
 
   def handle_404(request)
     Protocol::HTTP::Response[
       404,
       { "content-type" => "text/plain; charset-utf-8" },
       ["404 for #{request.path}"]
+    ]
+  end
+
+  def handle_options(request)
+    Protocol::HTTP::Response[
+      204,
+      {
+        "access-control-allow-methods" => "GET, PUT, OPTIONS",
+        "access-control-allow-origin" => request.headers["origin"],
+        "access-control-allow-headers" => "x-rdom-session-id, content-type, accept",
+      },
+      [""]
     ]
   end
 
@@ -120,7 +136,13 @@ class App
       .fetch(session_id)
       .send([:callback, callback_id, payload])
 
-    Protocol::HTTP::Response[200, {}, [""]]
+    Protocol::HTTP::Response[
+      204,
+      {
+        "access-control-allow-origin" => request.headers["origin"],
+      },
+      [""]
+    ]
   end
 
   def handle_stream(request, task: Async::Task.current)
@@ -147,12 +169,13 @@ class App
       {
         "content-type" => "x-rdom/json-stream",
         "x-rdom-session-id" => session.id,
+        "access-control-allow-origin" => request.headers["origin"],
       },
       body
     ]
   end
 
-  def send_file(filename, content_type)
+  def send_file(filename, content_type, headers = {})
     path = File.join(
       __dir__,
       "public",
@@ -161,7 +184,7 @@ class App
 
     Protocol::HTTP::Response[
       200,
-      { "content-type" => content_type },
+      { "content-type" => content_type, **headers },
       [File.read(path)]
     ]
   end
