@@ -12,37 +12,47 @@ customElements.define(
 
     async connectedCallback() {
       const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT
+      const res = await connect(endpoint)
+      const sessionId = res.headers.get(SESSION_ID_HEADER)
 
-      const res = await fetch(endpoint, {
-        method: "GET",
-        mode: "cors",
-        headers: new Headers({ "accept": STREAM_MIME_TYPE }),
-        credentials: "same-origin"
-      });
-
-      if (!res.ok) {
-        alert("Connection failed!")
-        console.error(res);
-        throw new Error("Res was not ok.");
-      }
-
-      const contentType = res.headers.get("content-type");
-
-      if (contentType !== STREAM_MIME_TYPE) {
-        alert(`Unexpected content type: ${contentType}`)
-        console.error(res);
-        throw new Error(`Unexpected content type: ${contentType}`)
-      }
-
-      const patcher = new Patcher(this.shadowRoot, endpoint)
+      const output = initCallbackStream(endpoint, sessionId)
 
       res.body
         .pipeThrough(new TextDecoderStream())
         .pipeThrough(initJSONDecoder())
-        .pipeTo(patcher.getWriter())
+        .pipeThrough(initPatchStream(endpoint, this.shadowRoot))
+        .pipeThrough(new TextEncoderStream())
+        .pipeTo(output)
     }
   }
 );
+
+async function connect(endpoint) {
+  const res = await fetch(endpoint, {
+    method: "GET",
+    mode: "cors",
+    headers: new Headers({ "accept": STREAM_MIME_TYPE }),
+    credentials: "same-origin"
+  });
+
+  if (!res.ok) {
+    alert("Connection failed!")
+    console.error(res);
+    throw new Error("Res was not ok.");
+  }
+
+  const contentType = res.headers.get("content-type");
+  console.log(res.headers.get("content-type"))
+  console.log(Object.fromEntries(res.headers.entries()))
+
+  if (contentType !== STREAM_MIME_TYPE) {
+    alert(`Unexpected content type: ${contentType}`)
+    console.error(res);
+    throw new Error(`Unexpected content type: ${contentType}`)
+  }
+
+  return res
+}
 
 function initJSONDecoder() {
   // This function is based on https://rob-blackbourn.medium.com/beyond-eventsource-streaming-fetch-with-readablestream-5765c7de21a1#6c5e
@@ -69,36 +79,85 @@ function initJSONDecoder() {
   })
 }
 
-class Patcher {
-  constructor(root, endpoint) {
-    this.endpoint = endpoint
-    this.sessionId = null
-    this.root = root
-    this.nodes = new Map()
+const supportsRequestStreams = (() => {
+  // https://developer.chrome.com/articles/fetch-streaming-requests/#feature-detection
+  let duplexAccessed = false;
+
+  const hasContentType = new Request('', {
+    body: new ReadableStream(),
+    method: 'POST',
+    get duplex() {
+      duplexAccessed = true;
+      return 'half';
+    },
+  }).headers.has('Content-Type');
+
+  return duplexAccessed && !hasContentType;
+})();
+
+function initCallbackStream(endpoint, sessionId) {
+  if (!supportsRequestStreams) {
+    return initCallbackStreamFetchFallback(endpoint, sessionId)
   }
 
-  apply(patch) {
-    const [type, ...args] = patch
-    const patchFn = PatchFunctions[type]
+  const { readable, writable } = new TransformStream();
 
-    if (patchFn) {
-      console.log('Applying', type, args)
-      try {
-        patchFn.apply(this, args)
-      } catch (e) {
-        console.error(e)
-      }
-      return
+  fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      [SESSION_ID_HEADER]: sessionId,
+    },
+    body: readable,
+    duplex: 'half',
+  });
+
+  return writable
+}
+
+function initCallbackStreamFetchFallback(endpoint, sessionId) {
+  return new WritableStream({
+    write(body, controller) {
+      fetch(endpoint, {
+        method: "PUT",
+        headers: new Headers({
+          "content-type": "application/json",
+          [SESSION_ID_HEADER]: sessionId,
+        }),
+        mode: "cors",
+        body: body
+      })
     }
+  })
+}
 
-    console.error("Patch not implemented:", type)
-  }
+function initPatchStream(endpoint, root) {
+  return new TransformStream({
+    start(controller) {
+      controller.endpoint = endpoint
+      controller.root = root
+      controller.sessionId = null
+      controller.nodes = new Map()
+    },
+    transform(patch, controller) {
+      const [type, ...args] = patch
+      const patchFn = PatchFunctions[type]
 
-  getWriter() {
-    return new WritableStream({
-      write: this.apply.bind(this)
-    })
-  }
+      if (patchFn) {
+        console.log('Applying', type, args)
+        try {
+          patchFn.apply(controller, args)
+        } catch (e) {
+          console.error(e)
+        }
+        return
+      }
+
+      console.error("Patch not implemented:", type)
+    },
+    flush(controller) {
+    }
+  })
 }
 
 const PatchFunctions = {
@@ -179,14 +238,8 @@ const PatchFunctions = {
               value: e.target.value
             }
           };
-          fetch(this.endpoint, {
-            method: "PUT",
-            headers: new Headers({
-              "content-type": "application/json"
-            }),
-            mode: "cors",
-            body: JSON.stringify([this.sessionId, callbackId, payload]),
-          })
+
+          this.enqueue(JSON.stringify([callbackId, payload]) + "\n")
         }
       )
     )

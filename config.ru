@@ -76,6 +76,8 @@ class Session
 end
 
 class App
+  SESSION_ID_HEADER_NAME = "x-rdom-session-id"
+
   def initialize(app)
     @app = app
     @sessions = {}
@@ -99,9 +101,39 @@ class App
       handle_stream(request)
     in "/.rdom" if request.method == "PUT"
       handle_callback(request)
+    in "/.rdom" if request.method == "POST"
+      handle_post(request)
     else
       handle_404(request)
     end
+  end
+
+  def handle_post(request)
+    session_id = request.headers[SESSION_ID_HEADER_NAME].to_s
+
+    session = @sessions.fetch(session_id) do
+      Console.logger.error(self, "Could not find session #{session_id.inspect}")
+
+      return Protocol::HTTP::Response[
+        404,
+        origin_header(request),
+        ["Could not find session #{session_id.inspect}"]
+      ]
+    end
+
+    request.body.each do |chunk|
+      JSON.parse(chunk, symbolize_names: true) => [
+        callback_id,
+        payload,
+      ]
+      session.send([:callback, callback_id, payload])
+    end
+
+    Protocol::HTTP::Response[
+      200,
+      { "content-type" => "text/plain; charset-utf-8" },
+      ["done"]
+    ]
   end
 
   def handle_index(_) =
@@ -121,8 +153,8 @@ class App
 
   def handle_options(request)
     headers = {
-      "access-control-allow-methods" => "GET, PUT, OPTIONS",
-      "access-control-allow-headers" => "x-rdom-session-id, content-type, accept",
+      "access-control-allow-methods" => "GET, PUT, POST, OPTIONS",
+      "access-control-allow-headers" => "#{SESSION_ID_HEADER_NAME}, content-type, accept",
       **origin_header(request),
     }
 
@@ -130,8 +162,9 @@ class App
   end
 
   def handle_callback(request)
+    session_id = request.headers[SESSION_ID_HEADER_NAME].to_s
+
     JSON.parse(request.body.read, symbolize_names: true) => [
-      session_id,
       callback_id,
       payload,
     ]
@@ -174,7 +207,7 @@ class App
       200,
       {
         "content-type" => "x-rdom/json-stream",
-        "x-rdom-session-id" => session.id,
+        SESSION_ID_HEADER_NAME => session.id,
         **origin_header(request),
       },
       body
