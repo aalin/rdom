@@ -1,12 +1,15 @@
 # rdom
 
-🔥 live demo at [rdom.fly.dev](https://rdom.fly.dev/)
+Reactive DOM updates with Ruby.
+
+🔥 live demo at [rdom.fly.dev](https://rdom.fly.dev/) 🚀
 
 ## Description
 
 This is a very basic experiment.
 For a more complete implementation,
-see [Mayu Live](https://github.com/mayu-live/framework).
+see [Mayu Live](https://github.com/mayu-live/framework),
+however, I had some ideas that I felt like I had to explore.
 
 This program reads `app/MyComponent.rb` and performs the following transforms:
 
@@ -31,3 +34,17 @@ Make sure you have Ruby 3.2 and bundler, then run:
 To start the thing, type:
 
     ruby config.ru
+
+## Limitations
+
+### No resuming
+
+If the connection drops, all state is lost.
+
+### Reordering is not implemented
+
+I'm not really sure how to solve it,
+but I think a clean solution lies behind the corner.
+
+If each node calculates some sort of index hash based on their neighbors,
+it might be possible for them to detect that they have moved...
