@@ -26,7 +26,7 @@ module VDOM
     SetTextContent = Data.define(:id, :content)
     ReplaceData = Data.define(:id, :offset, :count, :data)
     InsertData = Data.define(:id, :offset, :data)
-    DeleteData = Data.define(:id, :offset, :size)
+    DeleteData = Data.define(:id, :offset, :count)
 
     Ping = Data.define(:time)
 

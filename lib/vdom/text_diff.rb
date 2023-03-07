@@ -64,17 +64,24 @@ if __FILE__ == $0
 
     def diff_and_patch(seq1, seq2)
       result = seq1.dup
+      puts "\e[3m #{__method__}(#{seq1.inspect}, #{seq2.inspect}) \e[0m"
 
       VDOM::TextDiff.diff(nil, seq1, seq2) do |patch|
+        p(patch)
+
         case patch
         in VDOM::Patches::InsertData[offset:, data:]
           result.insert(offset, data)
         in VDOM::Patches::ReplaceData[offset:, count:, data:]
           result[offset...(offset + count)] = data
-        in VDOM::Patches::DeleteData[offset:, size:]
-          result[offset..(offset + size)] = ""
+        in VDOM::Patches::DeleteData[offset:, count:]
+          result[offset..(offset + count)] = ""
         end
       end
+
+      puts "\e[33mExpected: #{seq2.inspect}\e[0m"
+      puts "\e[33mActual:   #{result.inspect}\e[0m"
+      puts
 
       result
     end
