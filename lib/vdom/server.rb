@@ -199,8 +199,8 @@ module VDOM
           ]
         end
 
-        request.body.each do |chunk|
-          case JSON.parse(chunk, symbolize_names: true)
+        each_message(request.body) do |message|
+          case message
           in "callback", String => callback_id, payload
             session.callback(callback_id, payload)
           in "pong", Numeric => time
@@ -212,6 +212,20 @@ module VDOM
 
         Protocol::HTTP::Response[204, {}, []]
       end
+
+      def each_message(body)
+        buf = String.new
+
+        body.each do |chunk|
+          buf += chunk
+
+          if idx = buf.index("\n")
+            yield JSON.parse(buf[0..idx], symbolize_names: true)
+            buf = buf[idx.succ..-1].to_s
+          end
+        end
+      end
+
 
       def origin_header(request) =
         { "access-control-allow-origin" => request.headers["origin"] }
