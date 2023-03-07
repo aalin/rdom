@@ -63,8 +63,7 @@ module VDOM
         deletion = deleting.map(&:element).join
 
         if deleting.empty?
-          start = adding.map(&:position).min + offset
-          offset += replacement.length
+          start = adding.map(&:position).min + (bjs - ais)
 
           next yield Patches::InsertData[
             node_id,
@@ -74,7 +73,7 @@ module VDOM
         end
 
         if adding.empty?
-          start = deleting.map(&:position).min + offset
+          start = deleting.map(&:position).min + (bjs - ais)
 
           next yield Patches::DeleteData[
             node_id,
@@ -83,7 +82,7 @@ module VDOM
           ]
         end
 
-        start = adding.map(&:position).min + offset
+        start = adding.map(&:position).min + (bjs - ais)
 
         yield Patches::ReplaceData[
           node_id,

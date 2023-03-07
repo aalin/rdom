@@ -8,9 +8,9 @@ module VDOM
     def self.enabled? =
       Fiber[:vdom_debug_enabled?] != false
 
-    def self.disable(&)
+    def self.disable(enabled = false, &)
       prev = Fiber[:vdom_debug_enabled?]
-      Fiber[:vdom_debug_enabled?] = false
+      Fiber[:vdom_debug_enabled?] = enabled
       yield
     ensure
       Fiber[:vdom_debug_enabled?] = prev
