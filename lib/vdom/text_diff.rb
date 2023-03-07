@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby -rbundler/setup
+#!/usr/bin/env ruby -rbundler/setup -rpry
 # frozen_string_literal: true
 
 require "diff/lcs"
@@ -7,34 +7,58 @@ require_relative "patches"
 module VDOM
   class TextDiff
     def self.diff(node_id, seq1, seq2, &)
-      # NOTE: This implementation is buggy.
-      # Indexes and counts are incorrect sometimes.
-      Diff::LCS.diff(seq1, seq2).each do |changes|
-        deleting = changes.select(&:deleting?)
-        inserting = changes.reject(&:deleting?)
-        replacement = inserting.map(&:element).join
-        deletion = deleting.map(&:element).join
+      # This method is inspired by Diff::LCS.patch().
+
+      ai = 0
+      bj = 0
+
+      Diff::LCS.diff(seq1, seq2).each do |changeset|
+        ais = ai
+        bjs = bj
+
+        changeset.each do |change|
+          case
+          when change.deleting?
+            delta = change.position - ai
+            ai += delta.succ
+            bj += delta
+          when change.adding?
+            delta = change.position - bj
+            bj += delta.succ
+            ai += delta
+          end
+        end
+
+        adding = changeset.select(&:adding?)
+
+        if adding.empty?
+          start = bj
+          ax = ai - ais
+          bx = bj - bjs
+          count = ax - bx
+
+          next yield Patches::DeleteData[
+            node_id,
+            bj,
+            ax - bx
+          ]
+        end
+
+        deleting = changeset.select(&:deleting?)
+        replacement = adding.map(&:element).join
 
         if deleting.empty?
           next yield Patches::InsertData[
             node_id,
-            inserting.map(&:position).min,
+            bjs + ai - ais,
             replacement
-          ]
-        end
-
-        if inserting.empty?
-          next yield Patches::DeleteData[
-            node_id,
-            deleting.map(&:position).min,
-            deleting.map(&:position).max - deleting.map(&:position).min,
           ]
         end
 
         yield Patches::ReplaceData[
           node_id,
-          inserting.map(&:position).min,
-          deletion.length,
+          adding.first.position,
+          deleting.size,
           replacement
         ]
       end
@@ -55,33 +79,43 @@ if __FILE__ == $0
       assert_diffed("foobar", "foo")
       assert_diffed("foobaz", "foobarbaz")
       assert_diffed("foobaz", "foobarbaz")
-      assert_diffed("tjosannnnn", "tjohejsannnn")
+      assert_diffed("tjosannnnn", "tjohejannnn")
+    end
+
+    def test_diff_random
+      10.times do
+        words =
+          File.join(__dir__, "..", "..", "app", "words.txt")
+            .then { File.read(_1) }
+            .split.shuffle
+            .first(20)
+            .map(&:strip) + [""]
+
+        words.reduce("") do |seq1, seq2|
+          assert_diffed(seq1, seq2)
+        end
+      end
     end
 
     def assert_diffed(seq1, seq2)
-      assert_equal(seq2, diff_and_patch(seq1, seq2))
+      actual = diff_and_patch(seq1, seq2)
+      assert_equal(seq2, actual)
+      actual
     end
 
     def diff_and_patch(seq1, seq2)
       result = seq1.dup
-      puts "\e[3m #{__method__}(#{seq1.inspect}, #{seq2.inspect}) \e[0m"
 
       VDOM::TextDiff.diff(nil, seq1, seq2) do |patch|
-        p(patch)
-
         case patch
         in VDOM::Patches::InsertData[offset:, data:]
           result.insert(offset, data)
         in VDOM::Patches::ReplaceData[offset:, count:, data:]
           result[offset...(offset + count)] = data
         in VDOM::Patches::DeleteData[offset:, count:]
-          result[offset..(offset + count)] = ""
+          result[offset...(offset + count)] = ""
         end
       end
-
-      puts "\e[33mExpected: #{seq2.inspect}\e[0m"
-      puts "\e[33mActual:   #{result.inspect}\e[0m"
-      puts
 
       result
     end
