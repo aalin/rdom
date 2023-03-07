@@ -56,14 +56,14 @@ module VDOM
         d(bj:, bjs:, adding:)
         ax = ai - ais
         bx = bj - bjs
-        d(ax:, bx:)
-        d(d: bx - ax)
-        d(offset:)
+        dx = bx - ax
+        d(ax:, bx:, dx:)
+        # d(offset:)
         replacement = adding.map(&:element).join
         deletion = deleting.map(&:element).join
 
         if deleting.empty?
-          start = adding.map(&:position).min + (bjs - ais)
+          start = adding.map(&:position).min # + (bjs - ais).abs
 
           next yield Patches::InsertData[
             node_id,
@@ -73,7 +73,7 @@ module VDOM
         end
 
         if adding.empty?
-          start = deleting.map(&:position).min + (bjs - ais)
+          start = bj # deleting.map(&:position).min # + (bjs - ais).abs
 
           next yield Patches::DeleteData[
             node_id,
@@ -82,7 +82,7 @@ module VDOM
           ]
         end
 
-        start = adding.map(&:position).min + (bjs - ais)
+        start = adding.map(&:position).min  #+ (bjs - ais).abs
 
         yield Patches::ReplaceData[
           node_id,
@@ -92,7 +92,6 @@ module VDOM
         ]
       ensure
         d()
-        offset += bx - ax
       end
 
       while ai < seq1.length
@@ -119,21 +118,22 @@ if __FILE__ == $0
         assert_diffed("foobar", "foo")
         assert_diffed("foobaz", "foobarbaz")
         assert_diffed("foobaz", "foobarbaz")
-        assert_diffed("tjosannnnn", "tjohejannnn")
       end
+      assert_diffed("tjosannnnn", "tjohejannnn")
     end
 
     def test_diff_random
-      words =
-        File.join(__dir__, "..", "..", "app", "words.txt")
-          .then { File.read(_1) }
-          .split.shuffle
-          .first(20)
-          .map(&:strip)
+      10.times do
+        words =
+          File.join(__dir__, "..", "..", "app", "words.txt")
+            .then { File.read(_1) }
+            .split.shuffle
+            .first(20)
+            .map(&:strip)
 
-      words.reduce("") do |seq1, seq2|
-        p [seq1, seq2]
-        assert_diffed(seq1, seq2)
+        words.reduce("") do |seq1, seq2|
+          assert_diffed(seq1, seq2)
+        end
       end
     end
 
@@ -145,7 +145,10 @@ if __FILE__ == $0
 
     def diff_and_patch(seq1, seq2)
       result = seq1.dup
-      puts "\e[3m #{__method__}(#{seq1.inspect}, #{seq2.inspect}) \e[0m"
+
+      if VDOM::Debug.enabled?
+        puts "\e[3m #{__method__}(#{seq1.inspect}, #{seq2.inspect}) \e[0m"
+      end
 
       VDOM::TextDiff.diff(nil, seq1, seq2) do |patch|
         d(patch:)
