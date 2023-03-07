@@ -94,11 +94,33 @@ module VDOM
       SyntaxTree.parse(source)
         .accept(transformer.state_and_props)
         .accept(transformer.heredoc_html)
+        .then { transformer.wrap_in_class(_1) }
         .accept(transformer.frozen_strings)
         .then { SyntaxTree::Formatter.format(source, _1) }
     end
 
     def frozen_strings = FrozenStringLiteralsVisitor.new
+
+    def wrap_in_class(program)
+      statements =
+        Statements([
+          ClassDeclaration(
+            ConstPathRef(
+              VarRef(Ident("self")),
+              Const("Component")
+            ),
+            ConstPathRef(
+              VarRef(Const("VDOM")),
+              ConstPathRef(
+                VarRef(Const("Component")),
+                Const("Base")
+              )
+            ),
+            BodyStmt(program.statements, nil, nil, nil, nil),
+          )
+        ])
+      program.copy(statements:)
+    end
 
     def state_and_props
       SyntaxTree.mutation do |visitor|

@@ -58,6 +58,7 @@ def render
         style: {
           list_style_type: "none",
           display: "flex",
+          flex_wrap: "wrap",
           margin: "1em 0",
           padding: "1em",
           gap: ".5em",

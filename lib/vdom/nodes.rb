@@ -310,12 +310,14 @@ module VDOM
       class VStyles < Base
         class VStyle < Base
           def run(element_id, name, value)
-            patch(Patches::SetCSSProperty[element_id, name, value.to_s])
+            value = Array(value).join(" ").tr("_", "-")
+            patch(Patches::SetCSSProperty[element_id, name, value])
 
             receive do |new_value|
+              new_value = Array(value).join(" ").tr("_", "-")
               next if new_value == value
               value = new_value
-              patch(Patches::SetCSSProperty[element_id, name, value.to_s])
+              patch(Patches::SetCSSProperty[element_id, name, value])
             end
           ensure
             patch(Patches::RemoveCSSProperty[element_id, name])

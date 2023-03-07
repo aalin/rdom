@@ -3,6 +3,7 @@
 require_relative "transform"
 require_relative "descriptor"
 require_relative "reactively"
+require_relative "css_units"
 
 module VDOM
   module Component
@@ -12,8 +13,7 @@ module VDOM
       include Reactively::Helpers
 
       def self.import(filename)
-        self::COMPONENT_META => { path: }
-        Component.load_file(filename, File.dirname(path))
+        Component.load_file(filename, File.dirname(caller.first.split(":", 2).first))
       end
 
       def self.title = name[/[^:]+\z/]
@@ -44,6 +44,14 @@ module VDOM
 
     @loaded_components = {}
 
+    class ComponentModule < Module
+      using CSSUnits::Refinements
+
+      def initialize(code, path)
+        instance_eval(code, path, 1)
+      end
+    end
+
     def self.load_file(filename, source_path = nil)
       path = File.expand_path(filename, source_path).freeze
 
@@ -60,14 +68,13 @@ module VDOM
           puts "\e[3m TRANSFORMED \e[0m"
           puts "\e[32m#{transformed}\e[0m"
 
-          Class.new(Base) do |klass|
-            klass.const_set(:COMPONENT_META, {
-              name: File.basename(path, ".*").freeze,
-              path:,
-            }.freeze)
-            klass.class_eval(transformed, path, 1)
-          end
-      end
+          component = ComponentModule.new(transformed, path)::Component
+
+          name = File.basename(path, ".*").freeze
+          component.define_singleton_method(:title) { name }
+          component.const_set(:COMPONENT_META, { name:, path: }.freeze)
+          component
+        end
     end
   end
 end

@@ -2,6 +2,8 @@ MAX_WORD_LENGTH = 32
 INITIAL_VALUE = "Enter text here"
 
 def render
+  puts "\e[31mRendering #{__FILE__}\e[0m"
+
   input = signal(INITIAL_VALUE)
 
   output = computed do
@@ -35,15 +37,15 @@ def render
         style: {
           white_space: "pre-wrap",
           background: "#0001",
-          border: "1px solid #0003",
+          border: [1.px, :solid, "#0001"]
         }
       ],
       style: {
-        display: "flex",
-        flex_direction: "column",
-        padding: "0 1em",
-        margin: "0 auto",
-        max_width: "36em",
+        display: :flex,
+        flex_direction: :column,
+        padding: [0, 1.em],
+        margin: [0, :auto],
+        max_width: 36.em,
       }
     ]
   ]
