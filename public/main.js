@@ -18,8 +18,9 @@ customElements.define(
 
       res.body
         .pipeThrough(new TextDecoderStream())
-        .pipeThrough(initJSONDecoder())
-        .pipeThrough(initPatchStream(endpoint, this.shadowRoot))
+        .pipeThrough(new JSONDecoderStream())
+        .pipeThrough(new PatchStream(endpoint, this.shadowRoot))
+        .pipeThrough(new JSONEncoderStream())
         .pipeThrough(new TextEncoderStream())
         .pipeTo(output);
     }
@@ -53,29 +54,41 @@ async function connect(endpoint) {
   return res;
 }
 
-function initJSONDecoder() {
-  // This function is based on https://rob-blackbourn.medium.com/beyond-eventsource-streaming-fetch-with-readablestream-5765c7de21a1#6c5e
-  return new TransformStream({
-    start(controller) {
-      controller.buf = "";
-      controller.pos = 0;
-    },
+class JSONDecoderStream extends TransformStream {
+  constructor() {
+    // This transformer is based on https://rob-blackbourn.medium.com/beyond-eventsource-streaming-fetch-with-readablestream-5765c7de21a1#6c5e
+    super({
+      start(controller) {
+        controller.buf = "";
+        controller.pos = 0;
+      },
 
-    transform(chunk, controller) {
-      controller.buf += chunk;
+      transform(chunk, controller) {
+        controller.buf += chunk;
 
-      while (controller.pos < controller.buf.length) {
-        if (controller.buf[controller.pos] === "\n") {
-          const line = controller.buf.substring(0, controller.pos);
-          controller.enqueue(JSON.parse(line));
-          controller.buf = controller.buf.substring(controller.pos + 1);
-          controller.pos = 0;
-        } else {
-          controller.pos++;
+        while (controller.pos < controller.buf.length) {
+          if (controller.buf[controller.pos] === "\n") {
+            const line = controller.buf.substring(0, controller.pos);
+            controller.enqueue(JSON.parse(line));
+            controller.buf = controller.buf.substring(controller.pos + 1);
+            controller.pos = 0;
+          } else {
+            controller.pos++;
+          }
         }
+      },
+    })
+  }
+}
+
+class JSONEncoderStream extends TransformStream {
+  constructor() {
+    super({
+      transform(chunk, controller) {
+        controller.enqueue(JSON.stringify(chunk) + "\n")
       }
-    },
-  });
+    })
+  }
 }
 
 const supportsRequestStreams = (() => {
@@ -131,32 +144,35 @@ function initCallbackStreamFetchFallback(endpoint, sessionId) {
   });
 }
 
-function initPatchStream(endpoint, root) {
-  return new TransformStream({
-    start(controller) {
-      controller.endpoint = endpoint;
-      controller.root = root;
-      controller.sessionId = null;
-      controller.nodes = new Map();
-    },
-    transform(patch, controller) {
-      const [type, ...args] = patch;
-      const patchFn = PatchFunctions[type];
+class PatchStream extends TransformStream {
+  constructor(endpoint, root) {
+    super({
+      start(controller) {
+        controller.endpoint = endpoint;
+        controller.root = root;
+        controller.sessionId = null;
+        controller.nodes = new Map();
+      },
+      transform(patch, controller) {
+        const [type, ...args] = patch;
+        const patchFn = PatchFunctions[type];
 
-      if (patchFn) {
-        console.log("Applying", type, args);
-        try {
-          patchFn.apply(controller, args);
-        } catch (e) {
-          console.error(e);
+        if (patchFn) {
+          console.log("Applying", type, args);
+
+          try {
+            patchFn.apply(controller, args);
+          } catch (e) {
+            console.error(e);
+          }
+          return;
         }
-        return;
-      }
 
-      console.error("Patch not implemented:", type);
-    },
-    flush(controller) {},
-  });
+        console.error("Patch not implemented:", type);
+      },
+      flush(controller) {},
+    })
+  }
 }
 
 const PatchFunctions = {
@@ -236,14 +252,14 @@ const PatchFunctions = {
           },
         };
 
-        this.enqueue(JSON.stringify([callbackId, payload]) + "\n");
+        this.enqueue(["callback", callbackId, payload]);
       })
     );
   },
   RemoveHandler(id, event, callbackId) {
     this.nodes
       .get(id)
-      .removeEventListener(
+      ?.removeEventListener(
         event.replace(/^on/, ""),
         this.nodes.get(callbackId)
       );
@@ -251,5 +267,6 @@ const PatchFunctions = {
   },
   Ping(time) {
     console.info("Ping", time);
+    this.enqueue(["pong", time]);
   },
 };

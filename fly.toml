@@ -4,7 +4,8 @@ kill_timeout = 5
 processes = []
 
 [env]
-  ENDPOINT = "http://[::]:8080"
+  RDOM_BIND = "http://[::]:8080"
+  RDOM_LOCALHOST = false
 
 [experimental]
   auto_rollback = true
