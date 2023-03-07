@@ -26,6 +26,10 @@ def render
     words.value.sort_by(&:length).last.to_s
   end
 
+  joined = computed do
+    words.value.join(" ")
+  end
+
   oninput = ->(target:, **) do
     search.value = target[:value]
   end
@@ -34,5 +38,6 @@ def render
     H[:input, type: "text", oninput:],
     H[:pre, "Longest word: ", longest_word],
     list,
+    H[:p, joined],
   ]
 end
