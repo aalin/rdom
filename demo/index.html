@@ -30,7 +30,7 @@
         flex-wrap: wrap;
       }
 
-      vdom-root {
+      rdom-embed {
         margin: 1em;
         flex: 1 1;
         min-width: 20em;
@@ -56,13 +56,13 @@
       <!-- This is all you need to embed rdom -->
       <script type="module" src="https://rdom.fly.dev/rdom.js"></script>
 
-      <vdom-root src="https://rdom.fly.dev/.rdom">
+      <rdom-embed src="https://rdom.fly.dev/.rdom">
         <p>Initializing...</p>
-      </vdom-root>
+      </rdom-embed>
 
-      <vdom-root src="https://rdom.fly.dev/.rdom">
+      <rdom-embed src="https://rdom.fly.dev/.rdom">
         <p>Initializing...</p>
-      </vdom-root>
+      </rdom-embed>
     </main>
 
     <footer>

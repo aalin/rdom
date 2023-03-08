@@ -1,9 +1,10 @@
+const ELEMENT_NAME = "rdom-embed"
 const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
 
 customElements.define(
-  "vdom-root",
+  ELEMENT_NAME,
   class VDOMRoot extends HTMLElement {
     constructor() {
       super();
