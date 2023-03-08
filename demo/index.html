@@ -2,10 +2,37 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Ruby VDOM demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RDOM embed demo</title>
     <script type="module" src="https://rdom.fly.dev/.rdom.js"></script>
+    <style>
+      html {
+        height: 100%;
+      }
+
+      body {
+        background: linear-gradient(#ccc 0%, #666 100%);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2em;
+        padding: 2em;
+      }
+
+      vdom-root {
+        flex: 1 1;
+        min-width: 20em;
+        border: 5px solid #f0f;
+        border-radius: 3px;
+        background: #fff;
+        padding: 1em;
+        box-shadow: rgb(0 0 0 / 25%) 0px 54px 55px, rgb(0 0 0 / 12%) 0px -12px 30px, rgb(0 0 0 / 12%) 0px 4px 6px, rgb(0 0 0 / 17%) 0px 12px 13px, rgb(0 0 0 / 9%) 0px -3px 5px;
+      }
+    </style>
   </head>
   <body>
+    <vdom-root src="https://rdom.fly.dev/.rdom">
+      <p>Initializing...</p>
+    </vdom-root>
     <vdom-root src="https://rdom.fly.dev/.rdom">
       <p>Initializing...</p>
     </vdom-root>

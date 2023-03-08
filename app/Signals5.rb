@@ -31,21 +31,31 @@ def render
           input.value = target[:value]
         end,
         initialValue: INITIAL_VALUE,
+        style: {
+          flex: [1, 1],
+          max_width: 36.em,
+          min_width: 8.em,
+          font: "inherit",
+        },
       ],
       H[:pre,
         output,
         style: {
           white_space: "pre-wrap",
           background: "#0001",
-          border: [1.px, :solid, "#0001"]
-        }
+          border: [1.px, "solid", "#0001"],
+          flex: [1, 1],
+          max_width: 36.em,
+          min_width: 8.em,
+        },
       ],
       style: {
-        display: :flex,
-        flex_direction: :column,
+        display: "flex",
+        flex_wrap: "wrap",
+        justify_content: "center",
+        gap: 1.em,
         padding: [0, 1.em],
         margin: [0, :auto],
-        max_width: 36.em,
       }
     ]
   ]

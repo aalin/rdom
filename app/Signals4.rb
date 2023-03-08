@@ -19,7 +19,10 @@ def render
   end
 
   list = computed do
-    H[:ul, words.value.map { |key| H[:li, key, key:] }]
+    H[:ul,
+      words.value.map { |key| H[:li, key, key:] },
+      style: { margin: 0, paddding: 0 }
+    ]
   end
 
   longest_word = computed do
@@ -35,12 +38,16 @@ def render
   end
 
   H[:article,
-    H[:input, type: "text", oninput:],
+    H[:input, type: "text", oninput:, autocomplete: "off"],
     H[:pre, "Longest word: ", longest_word],
     H[:div,
-      list,
+      H[:div, list, style: { flex_basis: 30.percent }],
       H[:p, joined],
-      style: { display: "flex", gap: "1em" }
+      style: {
+        display: "grid",
+        grid_template_columns: [30.percent, "auto"],
+        gap: 1.em,
+      }
     ]
   ]
 end

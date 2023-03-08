@@ -31,13 +31,13 @@ def render
         onclick: method(:handle_click),
         style: {
           background: "hsl(%.2fturn 100%% 50%%)" % (@count / 100.0),
-          padding: "1em",
+          padding: 1.em,
         }
       ],
     ],
     style: {
-      border: "1px solid #000",
-      padding: "0 1em",
+      border: [1.px, "solid", "#000"],
+      padding: [0, 1.em],
     }
   ]
 end

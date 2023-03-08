@@ -180,6 +180,7 @@ module VDOM
           {
             "content-type" => "x-rdom/json-stream",
             SESSION_ID_HEADER_NAME => session.id,
+            "access-control-expose-headers" => SESSION_ID_HEADER_NAME,
             **origin_header(request),
           },
           body
@@ -193,7 +194,7 @@ module VDOM
           Console.logger.error(self, "Could not find session #{session_id.inspect}")
 
           return Protocol::HTTP::Response[
-            404,
+            401,
             origin_header(request),
             ["Could not find session #{session_id.inspect}"]
           ]

@@ -42,7 +42,7 @@ def render
                 margin: 0,
                 background: "transparent",
                 font_family: "inherit",
-                font_size: "1.2em",
+                font_size: 1.2.em,
                 cursor: "pointer",
                 text_decoration: "underline",
                 font_weight: @page == component ? "bold" : "normal"
@@ -59,10 +59,10 @@ def render
           list_style_type: "none",
           display: "flex",
           flex_wrap: "wrap",
-          margin: "1em 0",
-          padding: "1em",
-          gap: ".5em",
-          border_radius: "2px",
+          margin: [1.em, 0],
+          padding: 1.em,
+          gap: 0.5.em,
+          border_radius: 2.px,
           background: "#0003",
         }
       ]

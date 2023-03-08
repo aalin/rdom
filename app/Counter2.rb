@@ -24,26 +24,26 @@ def render
       H[:button,
         "Increment",
         onclick: ->{ count.value += 1 },
-        style: { padding: "1em" }
+        style: { padding: 1.em }
       ],
       H[:button,
         "Decrement",
         onclick: ->{ count.value -= 1 },
-        style: { padding: "1em" }
+        style: { padding: 1.em }
       ],
       H[:button,
         "Reset",
         onclick: ->{ count.value = 0 },
-        style: { padding: "1em" }
+        style: { padding: 1.em }
       ],
       style: {
         display: "flex",
-        gap: "1em",
+        gap: 1.em,
       }
     ],
     style: {
-      border: "1px solid #000",
-      padding: "0 1em",
+      border: [1.px, "solid", "#000"],
+      padding: [0, 1.em]
     }
   ]
 end

@@ -32,7 +32,6 @@ async function connect(endpoint) {
     method: "GET",
     mode: "cors",
     headers: new Headers({ accept: STREAM_MIME_TYPE }),
-    credentials: "same-origin",
   });
 
   if (!res.ok) {
@@ -85,6 +84,7 @@ class JSONEncoderStream extends TransformStream {
   constructor() {
     super({
       transform(chunk, controller) {
+        console.log(JSON.stringify(chunk))
         controller.enqueue(JSON.stringify(chunk) + "\n")
       }
     })
