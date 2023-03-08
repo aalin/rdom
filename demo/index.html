@@ -4,21 +4,34 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RDOM embed demo</title>
-    <script type="module" src="https://rdom.fly.dev/.rdom.js"></script>
     <style>
       html {
         height: 100%;
       }
 
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         background: linear-gradient(#ccc 0%, #666 100%);
+        font-family: sans-serif;
+        padding: 1em;
+        margin: 0;
+      }
+
+      h1 {
+        color: #f0f;
+        text-shadow: 0 0 5px #000;
+      }
+
+      main {
         display: flex;
         flex-wrap: wrap;
-        gap: 2em;
-        padding: 2em;
       }
 
       vdom-root {
+        margin: 1em;
         flex: 1 1;
         min-width: 20em;
         border: 5px solid #f0f;
@@ -30,11 +43,33 @@
     </style>
   </head>
   <body>
-    <vdom-root src="https://rdom.fly.dev/.rdom">
-      <p>Initializing...</p>
-    </vdom-root>
-    <vdom-root src="https://rdom.fly.dev/.rdom">
-      <p>Initializing...</p>
-    </vdom-root>
+    <header>
+      <h1>rdom embed demo</h1>
+      <p>
+        This page demonstrates how
+        <a href="https://github.com/aalin/rdom" target="_blank">rdom</a>
+        can be embedded into webpages.
+      </p>
+    </header>
+
+    <main>
+      <!-- This is all you need to embed rdom -->
+      <script type="module" src="https://rdom.fly.dev/rdom.js"></script>
+
+      <vdom-root src="https://rdom.fly.dev/.rdom">
+        <p>Initializing...</p>
+      </vdom-root>
+
+      <vdom-root src="https://rdom.fly.dev/.rdom">
+        <p>Initializing...</p>
+      </vdom-root>
+    </main>
+
+    <footer>
+      <p>
+        Source at
+        <a href="https://github.com/aalin/rdom" target="_blank">github.com/aalin/rdom</a>
+      </p>
+    </footer>
   </body>
 </html>

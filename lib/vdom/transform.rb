@@ -2,69 +2,59 @@
 
 require "syntax_tree"
 require "syntax_tree/visitor/mutation_visitor"
-
 require_relative "xml_utils"
-
-class SyntaxTree::Visitor::MutationVisitor
-  def visit_assign(node)
-    node.copy(target: visit(node.target), value: visit(node.value))
-  end
-
-  def visit_opassign(node)
-    node.copy(target: visit(node.target), value: visit(node.value))
-  end
-
-  def visit_assoc_splat(node)
-    node.copy(value: visit(node.value))
-  end
-
-  # def visit_method_add_block(node)
-  #   pp node
-  #   node.copy(
-  #     call: visit(node.call),
-  #     block: visit(node.block),
-  #     bodystmt: visit(node.bodystmt),
-  #   )
-  # end
-
-  def visit_field(node)
-    node.copy(
-      parent: visit(node.parent),
-      operator: node.operator == :"::" ? :"::" : visit(node.operator),
-      name: visit(node.name)
-    )
-  end
-
-  def visit_binary(node)
-    node.copy(left: visit(node.left), right: visit(node.right))
-  end
-
-  def visit_lambda(node)
-    node.copy(params: visit(node.params), statements: visit(node.statements))
-  end
-
-  def visit_assoc(node)
-    node.copy(key: visit(node.key), value: visit(node.value))
-  end
-
-  def visit_aref(node)
-    node.copy(
-      collection: visit(node.collection),
-      index: visit(node.index),
-    )
-  end
-
-  def visit_if_op(node)
-    node.copy(
-      predicate: visit(node.predicate),
-      truthy: visit(node.truthy),
-      falsy: visit(node.falsy)
-    )
-  end
-end
 
 module VDOM
   class Transform
+    class MutationVisitor < SyntaxTree::Visitor::MutationVisitor
+      def visit_assign(node)
+        node.copy(target: visit(node.target), value: visit(node.value))
+      end
+
+      def visit_opassign(node)
+        node.copy(target: visit(node.target), value: visit(node.value))
+      end
+
+      def visit_assoc_splat(node)
+        node.copy(value: visit(node.value))
+      end
+
+      def visit_field(node)
+        node.copy(
+          parent: visit(node.parent),
+          operator: node.operator == :"::" ? :"::" : visit(node.operator),
+          name: visit(node.name)
+        )
+      end
+
+      def visit_binary(node)
+        node.copy(left: visit(node.left), right: visit(node.right))
+      end
+
+      def visit_lambda(node)
+        node.copy(params: visit(node.params), statements: visit(node.statements))
+      end
+
+      def visit_assoc(node)
+        node.copy(key: visit(node.key), value: visit(node.value))
+      end
+
+      def visit_aref(node)
+        node.copy(
+          collection: visit(node.collection),
+          index: visit(node.index),
+        )
+      end
+
+      def visit_if_op(node)
+        node.copy(
+          predicate: visit(node.predicate),
+          truthy: visit(node.truthy),
+          falsy: visit(node.falsy)
+        )
+      end
+    end
+
     class FrozenStringLiteralsVisitor < SyntaxTree::Visitor
       def visit_program(node)
         node.copy(statements: visit(node.statements))
@@ -123,7 +113,7 @@ module VDOM
     end
 
     def state_and_props
-      SyntaxTree.mutation do |visitor|
+      MutationVisitor.new.tap do |visitor|
         visitor.mutate("VarRef[value: IVar | GVar]") do |node|
           aref(node.value)
         end
@@ -144,7 +134,7 @@ module VDOM
     end
 
     def heredoc_html
-      SyntaxTree.mutation do |visitor|
+      MutationVisitor.new.tap do |visitor|
         visitor.mutate("XStringLiteral | Heredoc[beginning: HeredocBeg[value: '<<~HTML']]") do |node|
           tokenizer = XMLUtils::Tokenizer.new
 

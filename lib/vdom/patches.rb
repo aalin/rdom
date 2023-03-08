@@ -2,7 +2,7 @@
 
 module VDOM
   module Patches
-    CreateRoot = Data.define(:session_id)
+    CreateRoot = Data.define()
     DestroyRoot = Data.define()
 
     CreateElement = Data.define(:id, :type)

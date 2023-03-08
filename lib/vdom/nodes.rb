@@ -606,21 +606,14 @@ module VDOM
         end
       end
 
-      def run(descriptor = nil, session_id:)
-        with_root(session_id) do
-          VChildren.run(nil, descriptor) do |children|
-            receive do |descriptor|
-              children.resume(descriptor)
-            end
+      def run(descriptor = nil)
+        patch(Patches::CreateRoot[])
+
+        VChildren.run(nil, descriptor) do |children|
+          receive do |descriptor|
+            children.resume(descriptor)
           end
         end
-      end
-
-      private
-
-      def with_root(session_id)
-        patch(Patches::CreateRoot[session_id])
-        yield
       ensure
         patch(Patches::DestroyRoot[])
       end

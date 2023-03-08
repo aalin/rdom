@@ -27,7 +27,7 @@ module VDOM
         @input.enqueue([:pong, time])
 
       def run(component, task: Async::Task.current)
-        VDOM.run(session_id: self.id) do |vroot|
+        VDOM.run do |vroot|
           task.async { input_loop(vroot) }
           task.async { ping_loop }
           task.async { patch_loop(vroot) }
@@ -119,7 +119,7 @@ module VDOM
           handle_index(request)
         in "/favicon.ico"
           handle_favicon(request)
-        in "/.rdom.js"
+        in "/rdom.js"
           handle_script(request)
         in "/.rdom" if request.method == "OPTIONS"
           handle_options(request)
@@ -137,7 +137,7 @@ module VDOM
       def handle_favicon(_) =
         send_file("favicon.png", "image/png")
       def handle_script(request) =
-        send_file("main.js", "application/javascript; charset=utf-8", origin_header(request))
+        send_file("rdom.js", "application/javascript; charset=utf-8", origin_header(request))
 
       def handle_404(request)
         Protocol::HTTP::Response[
@@ -211,7 +211,7 @@ module VDOM
           Console.logger.error(e)
         end
 
-        Protocol::HTTP::Response[204, {}, []]
+        Protocol::HTTP::Response[204, origin_header(request), []]
       end
 
       def each_message(body)

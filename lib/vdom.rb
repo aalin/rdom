@@ -8,11 +8,9 @@ require_relative "vdom/reactively"
 require_relative "vdom/nodes"
 
 module VDOM
-  def self.random_id = SecureRandom.alphanumeric(5)
-
-  def self.run(session_id: SecureRandom.alphanumeric(32))
+  def self.run
     Reactively.run do
-      vroot = VDOM::Nodes::VRoot.start(session_id:)
+      vroot = VDOM::Nodes::VRoot.start
       yield vroot
     ensure
       vroot&.stop

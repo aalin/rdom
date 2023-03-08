@@ -13,8 +13,11 @@ customElements.define(
     async connectedCallback() {
       const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT;
       const res = await connect(endpoint);
-      const sessionId = res.headers.get(SESSION_ID_HEADER);
-      const output = initCallbackStream(endpoint, sessionId);
+
+      const output = initCallbackStream(
+        endpoint,
+        getSessionIdHeader(res),
+      );
 
       res.body
         .pipeThrough(new TextDecoderStream())
@@ -26,6 +29,12 @@ customElements.define(
     }
   }
 );
+
+function getSessionIdHeader(res) {
+  const sessionId = res.headers.get(SESSION_ID_HEADER);
+  if (sessionId) return sessionId
+  throw new Error(`Could not read header: ${SESSION_ID_HEADER}`);
+}
 
 async function connect(endpoint) {
   const res = await fetch(endpoint, {
@@ -55,7 +64,8 @@ async function connect(endpoint) {
 
 class JSONDecoderStream extends TransformStream {
   constructor() {
-    // This transformer is based on https://rob-blackbourn.medium.com/beyond-eventsource-streaming-fetch-with-readablestream-5765c7de21a1#6c5e
+    // This transformer is based on this code:
+    // https://rob-blackbourn.medium.com/beyond-eventsource-streaming-fetch-with-readablestream-5765c7de21a1#6c5e
     super({
       start(controller) {
         controller.buf = "";
@@ -150,7 +160,6 @@ class PatchStream extends TransformStream {
       start(controller) {
         controller.endpoint = endpoint;
         controller.root = root;
-        controller.sessionId = null;
         controller.nodes = new Map();
       },
       transform(patch, controller) {
@@ -176,8 +185,7 @@ class PatchStream extends TransformStream {
 }
 
 const PatchFunctions = {
-  CreateRoot(sessionId) {
-    this.sessionId = sessionId;
+  CreateRoot() {
     this.nodes.set(null, this.root);
   },
   CreateElement(id, type) {
