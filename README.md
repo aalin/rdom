@@ -2,16 +2,39 @@
 
 Reactive DOM updates with Ruby.
 
-🔥 live demo at [rdom.fly.dev](https://rdom.fly.dev/) 🚀
+🔥 live demo at [rdom.fly.dev](https://rdom.fly.dev/)
+
+🚀 embedding demo at [rdom.netlify.app](https://rdom.netlify.app/)
 
 ## Description
 
-This is a very basic experiment.
-For a more complete implementation,
-see [Mayu Live](https://github.com/mayu-live/framework),
-however, I had some ideas that I felt like I had to explore.
+This is a basic experiment with a server side VDOM in Ruby.
+For a more complete implementation, see
+[Mayu Live](https://github.com/mayu-live/framework).
+I had some ideas that I felt like I had to explore,
+and this is the result.
 
-This program reads `app/MyComponent.rb` and performs the following transforms:
+## Server
+
+This thing comes with an HTTP/2 server.
+Start it with `ruby config.ru`.
+
+By default it binds to `https://localhost:8080`,
+but it can be changed by setting the environment variable
+`RDOM_BIND` like this `RDOM_BIND="https://[::]" ruby config.ru`.
+
+## Embedding
+
+These are the only lines of HTML you need to mount an app.
+
+```html
+<script type="module" src="https://rdom.fly.dev/rdom.js"></script>
+<rdom-embed src="https://rdom.fly.dev/.rdom"></rdom-embed>
+```
+
+## Transforms
+
+This program reads `app/App.rb` and performs the following transforms:
 
 * Add `frozen_string_literal: true` to the top of the file.
 * Transform `@foo` to `self.state[:foo]`.
