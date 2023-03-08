@@ -314,7 +314,7 @@ module VDOM
             patch(Patches::SetCSSProperty[element_id, name, value])
 
             receive do |new_value|
-              new_value = Array(value).join(" ").tr("_", "-")
+              new_value = Array(new_value).join(" ").tr("_", "-")
               next if new_value == value
               value = new_value
               patch(Patches::SetCSSProperty[element_id, name, value])
