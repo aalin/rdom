@@ -38,14 +38,15 @@ def render
               onclick: ->() { @page = component },
               style: {
                 border: 0,
-                padding: 0,
+                padding: [0.25.em, 0.5.em],
+                border_radius: 2.px,
                 margin: 0,
                 background: "transparent",
                 font_family: "inherit",
                 font_size: 1.2.em,
                 cursor: "pointer",
                 text_decoration: "underline",
-                font_weight: @page == component ? "bold" : "normal"
+                background_color: @page == component ? "#0003" : "transparent",
               },
             ],
             key: component.hash,
@@ -60,8 +61,8 @@ def render
           display: "flex",
           flex_wrap: "wrap",
           margin: [1.em, 0],
-          padding: 1.em,
-          gap: 0.5.em,
+          padding: [0.5.em],
+          gap: 0,
           border_radius: 2.px,
           background: "#0003",
         }
