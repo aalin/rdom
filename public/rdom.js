@@ -51,8 +51,6 @@ async function connect(endpoint) {
   }
 
   const contentType = res.headers.get("content-type");
-  console.log(res.headers.get("content-type"));
-  console.log(Object.fromEntries(res.headers.entries()));
 
   if (contentType !== STREAM_MIME_TYPE) {
     alert(`Unexpected content type: ${contentType}`);
@@ -95,8 +93,9 @@ class JSONEncoderStream extends TransformStream {
   constructor() {
     super({
       transform(chunk, controller) {
-        console.log(JSON.stringify(chunk))
-        controller.enqueue(JSON.stringify(chunk) + "\n")
+        const transformed = JSON.stringify(chunk)
+        console.log("Sending", transformed)
+        controller.enqueue(transformed + "\n")
       }
     })
   }
@@ -168,7 +167,7 @@ class PatchStream extends TransformStream {
         const patchFn = PatchFunctions[type];
 
         if (patchFn) {
-          console.log("Applying", type, args);
+          console.debug("Applying", type, args);
 
           try {
             patchFn.apply(controller, args);
@@ -193,9 +192,13 @@ const PatchFunctions = {
     this.nodes.set(id, document.createElement(type));
   },
   InsertBefore(parentId, id, refId) {
-    this.nodes
-      .get(parentId)
-      .insertBefore(this.nodes.get(id), refId && this.nodes.get(refId));
+    const parent = this.nodes.get(parentId);
+    const child = this.nodes.get(id);
+    const ref = refId && this.nodes.get(refId);
+
+    console.info("Inserting", child.textContent, "before", ref?.textContent);
+
+    parent.insertBefore(child, ref);
   },
   RemoveChild(parentId, id) {
     const child = this.nodes.get(id);
@@ -275,7 +278,6 @@ const PatchFunctions = {
     this.nodes.delete(callbackId);
   },
   Ping(time) {
-    console.info("Ping", time);
     this.enqueue(["pong", time]);
   },
 };

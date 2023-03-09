@@ -64,10 +64,10 @@ To start the thing, type:
 
 If the connection drops, all state is lost.
 
-### Reordering is not implemented
+### Reordering is broken
 
-I'm not really sure how to solve it,
-but I think a clean solution lies behind the corner.
+`VDOM::Nodes::VChild` has a position hash which is calculated to be
+between the previous and next node. The idea is that if the position
+changes, then the position should update in the DOM.
 
-If each node calculates some sort of index hash based on their neighbors,
-it might be possible for them to detect that they have moved...
+This worked great when I tried it on paper, however I can't get it to work.

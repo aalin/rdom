@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "securerandom"
-require "pry"
 require "async"
 require "async/barrier"
 require "async/condition"
@@ -117,34 +116,6 @@ module VDOM
         yield id
       ensure
         patch(Patches::RemoveNode[id])
-      end
-    end
-
-    class VReactively < Base
-      def run(signal)
-        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
-          effect = Reactively::API::Effect.new do
-            vnode.resume(Descriptor.normalize_children(signal.value))
-          end
-
-          receive do |new_signal|
-            unless signal == new_signal
-              raise "Signal changed!"
-            end
-          end
-        ensure
-          effect.dispose!
-        end
-      end
-    end
-
-    class VSignal < Base
-      def run(signal)
-        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
-          loop do
-            vnode.resume(Descriptor.normalize_children(signal.wait))
-          end
-        end
       end
     end
 
@@ -384,53 +355,6 @@ module VDOM
       end
     end
 
-    class VAny < Base
-      def run(descriptor)
-        loop do
-          catch do |type_changed|
-            descriptor = unwrap(descriptor)
-            type = descriptor_to_node_type(descriptor)
-
-            type.run(descriptor) do |vnode|
-              receive do |new_descriptor|
-                new_descriptor = unwrap(new_descriptor)
-
-                unless Descriptor.same?(descriptor, new_descriptor)
-                  throw(type_changed)
-                end
-
-                vnode.resume(descriptor = new_descriptor)
-              end
-            end
-          end
-        end
-      end
-
-      def unwrap(descriptor)
-        case Array(descriptor).compact.flatten
-        in [one] then one
-        in [*many] then many
-        end
-      end
-
-      def descriptor_to_node_type(descriptor)
-        case descriptor
-        in Reactively::API::Readable
-          VReactively
-        in Array
-          VFragment
-        in Descriptor[type: Class]
-          VComponent
-        in Descriptor[type: :slot]
-          VSlot
-        in Descriptor[type: Symbol]
-          VElement
-        else
-          VText
-        end
-      end
-    end
-
     class VSlot < Base
       def run(descriptor)
         name = descriptor.props[:name]
@@ -444,35 +368,6 @@ module VDOM
       end
     end
 
-    class VChild < Base
-      attr_reader :dom_id
-
-      def run(child, descriptor)
-        @child = child
-
-        VAny.run(descriptor) do |vnode|
-          receive do |descriptor|
-            vnode.resume(descriptor)
-          end
-        end
-      end
-
-      def mount_dom_node(id)
-        if @dom_id
-          raise "There is already a DOM node mounted here"
-        end
-
-        begin
-          @dom_id = id
-          patch(Patches::InsertBefore[@child.parent_id, id, @child.next_dom_id])
-          yield
-        ensure
-          patch(Patches::RemoveChild[@child.parent_id, id])
-          @dom_id = nil
-        end
-      end
-    end
-
     class VChildren < Base
       class Child
         attr_reader :hash
@@ -481,12 +376,14 @@ module VDOM
         attr_accessor :parent_id
         attr_accessor :previous_sibling
         attr_accessor :next_sibling
+        attr_reader :position
 
-        def initialize(hash)
+        def initialize(hash) =
           @hash = hash
-        end
 
         def resume(descriptor)
+          @position ||= calculate_position
+
           if @node
             @node.resume(descriptor)
           else
@@ -496,15 +393,32 @@ module VDOM
           self
         end
 
-        def stop
+        def stop =
           @node&.stop
-        end
 
-        def next_dom_id
-          if sibling = @next_sibling
-            sibling&.node&.dom_id || sibling.next_dom_id
+        def next_dom_id =
+          @next_sibling&.dom_id_or_next
+        def dom_id_or_next =
+          @node&.dom_id || @next_sibling&.dom_id_or_next
+
+        alias head previous_sibling
+        alias tail next_sibling
+
+        def update_position!
+          if position_changed?
+            @node&.insert!
+            @position = calculate_position
           end
         end
+
+        def position_changed? =
+          @position && (head_pos > @position || @position > tail_pos)
+        def calculate_position =
+          head_pos + (tail_pos - head_pos) / 2.0
+        def head_pos =
+          head&.position || head&.head_pos || 0.0
+        def tail_pos =
+          tail&.position || tail&.tail_pos || 1.0
       end
 
       def run(parent_id, descriptors)
@@ -560,6 +474,7 @@ module VDOM
                 child.next_sibling = next_sibling
               end
           end
+          .each(&:update_position!)
           .zip(descriptors)
           .map do |child, descriptor|
             child.resume(descriptor)
@@ -571,6 +486,104 @@ module VDOM
             end
           end
           .group_by(&:hash)
+      end
+    end
+
+    class VChild < Base
+      attr_reader :dom_id
+
+      def run(child, descriptor)
+        @child = child
+
+        VAny.run(descriptor) do |vnode|
+          receive do |descriptor|
+            vnode.resume(descriptor)
+          end
+        end
+      end
+
+      def insert!
+        patch(Patches::InsertBefore[@child.parent_id, @dom_id, @child.next_dom_id])
+      end
+
+      def mount_dom_node(id)
+        if @dom_id
+          raise "There is already a DOM node mounted here"
+        end
+
+        begin
+          @dom_id = id
+          insert!
+          yield
+        ensure
+          patch(Patches::RemoveChild[@child.parent_id, id])
+          @dom_id = nil
+        end
+      end
+    end
+
+    class VReactively < Base
+      def run(signal)
+        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
+          effect = Reactively::API::Effect.new do
+            vnode.resume(Descriptor.normalize_children(signal.value))
+          end
+
+          receive do |new_signal|
+            unless signal == new_signal
+              raise "Signal changed!"
+            end
+          end
+        ensure
+          effect.dispose!
+        end
+      end
+    end
+
+    class VAny < Base
+      def run(descriptor)
+        loop do
+          catch do |type_changed|
+            descriptor = unwrap(descriptor)
+            type = descriptor_to_node_type(descriptor)
+
+            type.run(descriptor) do |vnode|
+              receive do |new_descriptor|
+                new_descriptor = unwrap(new_descriptor)
+
+                unless Descriptor.same?(descriptor, new_descriptor)
+                  throw(type_changed)
+                end
+
+                vnode.resume(descriptor = new_descriptor)
+              end
+            end
+          end
+        end
+      end
+
+      def unwrap(descriptor)
+        case Array(descriptor).compact.flatten
+        in [one] then one
+        in [*many] then many
+        end
+      end
+
+      def descriptor_to_node_type(descriptor)
+        case descriptor
+        in Reactively::API::Readable
+          VReactively
+        in Array
+          VFragment
+        in Descriptor[type: Class]
+          VComponent
+        in Descriptor[type: :slot]
+          VSlot
+        in Descriptor[type: Symbol]
+          VElement
+        else
+          VText
+        end
       end
     end
 

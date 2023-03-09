@@ -323,15 +323,18 @@ module VDOM
 
         def initialize(value) =
           @reactive = Reactive.new(value)
+
         def value =
           @reactive.value
-        def inspect =
-          "#<Signal value=#{@reactive.peek.inspect}>"
+
         def value=(new_value)
           API.batch do
             @reactive.value = new_value
           end
         end
+
+        def inspect =
+          "#<Signal value=#{@reactive.peek.inspect}>"
       end
 
       class Computed
@@ -339,6 +342,7 @@ module VDOM
 
         def initialize(&) =
           @reactive = Reactive.new(effect: false, &)
+
         def value =
           @reactive.value
 
@@ -356,10 +360,6 @@ module VDOM
       class Effect < Computed
         def initialize(&) =
           @reactive = Reactive.new(effect: true, &)
-        def dispose!
-          @reactive.value = Disposed
-          @reactive = nil
-        end
       end
     end
 

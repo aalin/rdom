@@ -34,7 +34,7 @@ def render
   end
 
   oninput = ->(target:, **) do
-    search.value = target[:value]
+    search.value = target[:value].to_s.downcase
   end
 
   H[:article,
