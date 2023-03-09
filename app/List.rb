@@ -50,8 +50,8 @@ def render
   end
 
   H[:article,
+    H[:p, "This page shows that nodes aren't reordered properly."],
     H[:div,
-      H[:p, "This page shows that nodes aren't reordered properly."],
       H[:fieldset,
         H[:legend, "Add"],
         H[:div,
