@@ -28,7 +28,7 @@ def render
     H[:div,
       H[:textarea,
         oninput: ->(target:, **) do
-          input.value = target[:value]
+          input.value = target[:value].to_s.downcase
         end,
         initialValue: INITIAL_VALUE,
         style: {

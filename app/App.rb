@@ -7,6 +7,7 @@ Signals2 = import("Signals2.rb")
 Signals3 = import("Signals3.rb")
 Signals4 = import("Signals4.rb")
 Signals5 = import("Signals5.rb")
+List = import("List.rb")
 
 PAGES = [
   StartPage,
@@ -18,6 +19,7 @@ PAGES = [
   Signals3,
   Signals4,
   Signals5,
+  List,
 ]
 
 def initialize(**)
