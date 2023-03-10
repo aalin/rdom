@@ -177,43 +177,192 @@ module VDOM
       end
 
     end
+    #
+    # class VFragment < VNode
+    #   def run(descriptors)
+    #     p(descriptors:)
+    #     with_fragment do |id|
+    #       VChildren.run(id, descriptors) do |children|
+    #         mount_dom_node(id) do
+    #           receive do |descriptors|
+    #             children.resume(descriptors)
+    #           end
+    #         end
+    #       end
+    #     end
+    #   end
+    #
+    #   def with_fragment(id: generate_id)
+    #     patch(Patches::CreateDocumentFragment[id])
+    #     yield id
+    #   ensure
+    #     patch(Patches::RemoveNode[id])
+    #   end
+    # end
 
-    class VFragment < VNode
-      def run(descriptors)
-        with_fragment do |id|
-          VChildren.run(id, descriptors) do |children|
-            mount_dom_node(id) do
-              receive do |descriptors|
-                children.resume(descriptors)
-              end
+    class VSlotted < VNode
+      class UpdateOrder < VNode
+        def run(parent_id, slot_name, children)
+          order = []
+
+          receive do |children|
+            new_order = calculate_order(children)
+            next if new_order == order
+            order = new_order
+
+            patch(Patches::AssignSlot[parent_id, slot_name, order])
+          end
+        end
+
+        def calculate_order(children)
+          children
+            .values
+            .flatten
+            .sort_by(&:index)
+            .map(&:dom_id)
+            .compact
+        end
+      end
+
+      class VSlottedChild < Base
+        attr_reader :dom_id
+
+        def run(child, descriptor)
+          @child = child
+
+          VAny.run(descriptor) do |vnode|
+            receive do |descriptor|
+              vnode.resume(descriptor)
             end
+          end
+        end
+
+        def insert!
+          patch(Patches::InsertBefore[@child.parent_id, @dom_id, nil])
+        end
+
+        def mount_dom_node(id)
+          if @dom_id
+            raise "There is already a DOM node mounted here"
+          end
+
+          @parent.mount_dom_node(@dom_id = id) do
+            yield
+          ensure
+            @dom_id = nil
           end
         end
       end
 
-      def with_fragment(id: generate_id)
-        patch(Patches::CreateDocumentFragment[id])
-        yield id
+      class Child
+        def initialize(hash, index: nil)
+          @hash = hash
+          @index = nil
+        end
+
+        attr_reader :hash
+        attr_reader :node
+        attr_accessor :index
+        attr_accessor :parent_id
+
+        def dom_id = @node&.dom_id
+
+        def resume(descriptor)
+          if @node
+            @node.resume(descriptor)
+          else
+            @node = VSlottedChild.start(self, descriptor)
+          end
+
+          self
+        end
+
+        def stop =
+          @node&.stop
+      end
+
+      def reorder!
+        if cond = @reorder
+          puts "\e[3;33mSignalling!!\e[0m"
+          cond.signal(true)
+        else
+          puts "\e[3;31mNo condition!!\e[0m"
+        end
+      end
+
+      def run(parent_id, name, descriptors)
+        @reorder = Async::Condition.new
+        @parent_id = parent_id
+        @name = name
+
+        children = update_children({}, descriptors)
+
+        UpdateOrder.run(@parent_id, @name, children) do |update_order|
+          async do
+            loop do
+              puts "updating order #{children.inspect}"
+              update_order.resume(children)
+              puts "Waiting to resume"
+              @reorder.wait
+            end
+
+            puts "\e[32mending\e[0m"
+          ensure
+            puts "\e[31mStopping reorder thing\e[0m"
+          end
+
+          receive do |descriptors|
+            children = update_children({}, descriptors)
+            reorder!
+          end
+        end
+      end
+
+      def update_children(children, descriptors)
+        diff_children(
+          children,
+          normalize_descriptors(descriptors),
+        )
+      end
+
+      def diff_children(children, descriptors)
+        descriptors
+          .map.with_index do |descriptor, index|
+            child =
+              children[Descriptor.get_hash(descriptor)]&.shift ||
+                Child.new(Descriptor.get_hash(descriptor))
+            child.index = index
+            child
+          end
+          .zip(descriptors)
+          .map do |child, descriptor|
+            child.resume(descriptor)
+            child
+          end
+          .tap do
+            if children
+              children.values.flatten.each(&:stop)
+            end
+          end
+          .group_by(&:hash)
+      end
+
+      def normalize_descriptors(descriptors)
+        Descriptor.normalize_children(descriptors)
+      end
+
+      def mount_dom_node(id)
+        puts "Mounting #{id} into #{@parent_id}"
+        patch(Patches::InsertBefore[@parent_id, id, nil])
+        reorder!
+        yield
       ensure
-        patch(Patches::RemoveNode[id])
+        patch(Patches::RemoveChild[@parent_id, id])
+        reorder!
       end
     end
 
     class VCustomElement < VNode
-      class VCustomSlot < VNode
-        def run(parent_id, key, descriptor)
-          @parent_id = parent_id
-        end
-
-        def mount_dom_node(id)
-          puts "#{__method__}: #{id.inspect}"
-          patch(Patches::InsertBefore[@dom_id, id, nil])
-          yield
-        ensure
-          patch(Patches::RemoveChild[@dom_id, id])
-        end
-      end
-
       def run(descriptor)
         custom_element = descriptor.type
         closest(VRoot)&.register_custom_element(custom_element)
@@ -221,23 +370,25 @@ module VDOM
         elem = Descriptor[custom_element.name.to_sym]
 
         with_element(elem.type) do
-          slots = diff_slots({}, descriptor.props[:slots])
+          slots = diff_slots({}, descriptor.props[:slots] || {})
 
           receive do |descriptor|
-            slots = diff_slots(slots, descriptor.props[:slots])
+            slots = diff_slots(slots, descriptor.props[:slots] || {})
           end
         end
       end
 
       def diff_slots(slots, new_slots)
+        p(dom_id: @dom_id, new_slots:)
         result =
-          new_slots.map do |key, value|
-            if old = slots.delete(key)
-              old.resume(value)
-              [key, old]
+          new_slots.map do |name, descriptor|
+            if slot = slots.delete(name)
+              slot.resume(descriptor)
             else
-              [key, VCustomSlot.start(@dom_id, key, value)]
+              slot = VSlotted.start(@dom_id, name, descriptor)
             end
+
+            [name, slot]
           end.to_h
         slots.values.flatten.each(&:stop)
         result
@@ -254,30 +405,30 @@ module VDOM
       end
     end
 
-    class VElement < VNode
-      def run(descriptor)
-        with_element(descriptor.type) do |id|
-          VAttributes.run(id, descriptor.props) do |attributes|
-            VChildren.run(id, descriptor.children) do |children|
-              mount_dom_node(id) do
-                receive do |descriptors|
-                  Array(descriptors).flatten => [descriptor]
-                  attributes.resume(descriptor.props)
-                  children.resume(descriptor.children)
-                end
-              end
-            end
-          end
-        end
-      end
-
-      def with_element(type, id: generate_id)
-        patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
-        yield id
-      ensure
-        patch(Patches::RemoveNode[id])
-      end
-    end
+    # class VElement < VNode
+    #   def run(descriptor)
+    #     with_element(descriptor.type) do |id|
+    #       VAttributes.run(id, descriptor.props) do |attributes|
+    #         VChildren.run(id, descriptor.children) do |children|
+    #           mount_dom_node(id) do
+    #             receive do |descriptors|
+    #               Array(descriptors).flatten => [descriptor]
+    #               attributes.resume(descriptor.props)
+    #               children.resume(descriptor.children)
+    #             end
+    #           end
+    #         end
+    #       end
+    #     end
+    #   end
+    #
+    #   def with_element(type, id: generate_id)
+    #     patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
+    #     yield id
+    #   ensure
+    #     patch(Patches::RemoveNode[id])
+    #   end
+    # end
 
     class VAttributes < Base
       class VAttr < Base
@@ -428,179 +579,6 @@ module VDOM
       end
     end
 
-    class VChildren < VNode
-      class Child
-        attr_reader :hash
-        attr_reader :node
-        attr_accessor :index
-        attr_accessor :parent_id
-        attr_accessor :previous_sibling
-        attr_accessor :next_sibling
-
-        def initialize(hash) =
-          @hash = hash
-
-        def resume(descriptor)
-          if @node
-            @node.resume(descriptor)
-          else
-            @node = VChild.start(self, descriptor)
-          end
-
-          self
-        end
-
-        def stop =
-          @node&.stop
-
-        def next_dom_id =
-          @next_sibling&.dom_id_or_next
-        def dom_id_or_next =
-          dom_id || @next_sibling&.dom_id_or_next
-        def dom_id =
-          @node&.dom_id
-      end
-
-      def reorder!
-        @reorder&.signal(true)
-      end
-
-      def run(parent_id, descriptors)
-        @parent_id = parent_id
-        @reorder = Async::Condition.new
-
-        with_children(parent_id) do
-          children = update_children({}, descriptors)
-
-          async do
-            order = []
-
-            loop do
-              @reorder.wait
-
-              new_order =
-                children
-                  .values
-                  .flatten
-                  .sort_by(&:index)
-                  .map(&:dom_id)
-                  .compact
-
-              next if new_order == order
-              order = new_order
-
-              patch(Patches::ReorderChildren[@slot_id, new_order])
-            end
-          end
-
-          receive do |descriptors|
-            children = update_children(children, descriptors)
-            @reorder.signal
-          end
-        ensure
-          update_children(children, [])
-        end
-      end
-
-      def with_children(parent_id, slot_id: generate_id)
-        @slot_id = slot_id
-        patch(Patches::CreateChildren[parent_id, slot_id])
-        yield
-      ensure
-        patch(Patches::RemoveChildren[slot_id])
-        @slot_id = nil
-      end
-
-      def update_children(children, descriptors)
-        diff_children(
-          children,
-          normalize_descriptors(descriptors),
-        )
-      end
-
-      def normalize_descriptors(descriptors)
-        Descriptor
-          .normalize_children(descriptors)
-          .reject do
-            _1 in Descriptor[slot:] if slot
-          end
-      end
-
-      def group_descriptors_by_slots(descriptors)
-        descriptors.group_by do |descriptor|
-          case descriptor
-          in Descriptor[slot:]
-            slot
-          else
-            nil
-          end
-        end
-      end
-
-      def diff_children(children, descriptors)
-        descriptors
-          .map.with_index do |descriptor, index|
-            children[Descriptor.get_hash(descriptor)]&.shift ||
-              Child.new(Descriptor.get_hash(descriptor))
-          end
-          .tap do
-            [nil, *_1, nil]
-              .each_cons(3)
-              .with_index do |(previous_sibling, child, next_sibling), index|
-                child.parent_id = "#{@slot_id}-slot"
-                child.index = index
-                child.previous_sibling = previous_sibling
-                child.next_sibling = next_sibling
-              end
-          end
-          .zip(descriptors)
-          .map do |child, descriptor|
-            child.resume(descriptor)
-            child
-          end
-          .tap do
-            if children
-              children.values.flatten.each(&:stop)
-            end
-          end
-          .group_by(&:hash)
-      end
-    end
-
-    class VChild < Base
-      attr_reader :dom_id
-
-      def run(child, descriptor)
-        @child = child
-
-        VAny.run(descriptor) do |vnode|
-          receive do |descriptor|
-            vnode.resume(descriptor)
-          end
-        end
-      end
-
-      def insert!
-        patch(Patches::InsertBefore[@child.parent_id, @dom_id, nil])
-        closest(VChildren).reorder!
-      end
-
-      def mount_dom_node(id)
-        if @dom_id
-          raise "There is already a DOM node mounted here"
-        end
-
-        begin
-          @dom_id = id
-          insert!
-          yield
-        ensure
-          patch(Patches::RemoveChild[@child.parent_id, id])
-          @dom_id = nil
-        end
-      end
-    end
-
     class VReactively < Base
       def run(signal)
         VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
@@ -661,7 +639,7 @@ module VDOM
         in Descriptor[type: :slot]
           VSlot
         in Descriptor[type: Symbol]
-          p type
+          p descriptor
           VElement
         else
           VText
@@ -711,13 +689,19 @@ module VDOM
         end
       end
 
-      def run(descriptor = nil)
+      RootElement = Component::CustomElement[
+        "rdom-root",
+        '<slot name="children"></slot>'
+      ]
+
+      def run(children = nil)
+        register_custom_element(RootElement)
+
         patch(Patches::CreateRoot[])
 
-        VChildren.run(nil, descriptor) do |children|
-          receive do |descriptor|
-        p descriptor
-            children.resume(descriptor)
+        VSlotted.run(nil, "children", children) do |vslotted|
+          receive do |children|
+            vslotted.resume(children)
           end
         end
       ensure

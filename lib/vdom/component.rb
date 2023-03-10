@@ -68,7 +68,7 @@ module VDOM
           puts "\e[33m#{source}\e[0m"
 
           if File.extname(filename) == ".haml"
-            source = HamlTransform.transform(source)
+            source = HamlTransform.transform(source, filename)
           end
 
           puts "\e[3m SOURCE \e[0m"

@@ -19,8 +19,8 @@ end
 
 module VDOM
   class HamlTransform < SyntaxTree::Haml::Visitor
-    def self.transform(source)
-      transformer = new
+    def self.transform(source, filename = SecureRandom.alphanumeric(5))
+      transformer = new(filename)
       parsed = SyntaxTree::Haml.parse(source)
       transformed = parsed.accept(transformer)
       formatter = SyntaxTree::Formatter.new(source, [])
@@ -30,8 +30,8 @@ module VDOM
     end
 
     class CustomElement
-      def initialize(id: SecureRandom.alphanumeric(10).downcase)
-        @name = "rdom-elem-#{id}"
+      def initialize(name, id: SecureRandom.alphanumeric(5))
+        @name = name
         @class_name = "Partial_#{id}"
         @refs = []
         @props = []
@@ -59,7 +59,8 @@ module VDOM
 
     include SyntaxTree::DSL
 
-    def initialize
+    def initialize(filename)
+      @filename = filename
       @custom_elements = []
     end
 
@@ -85,7 +86,7 @@ module VDOM
 
       Program(
         Statements([
-          *@custom_elements.reverse.map { define_custom_element(_1) },
+          *@custom_elements.map { define_custom_element(_1) },
           *pre,
           DefNode(
             nil,
@@ -101,24 +102,20 @@ module VDOM
     def define_custom_element(custom_element)
       Assign(
         VarField(Const(custom_element.class_name)),
-        CallNode(
-          Const("CustomElement"),
-          Period("."),
-          Ident("new"),
-          ArgParen(
-            Args([
-              BareAssocHash([
-                Assoc(
-                  Label("name:"),
-                  StringLiteral([TStringContent(custom_element.name)], "'")
-                ),
-                Assoc(
-                  Label("template:"),
-                  StringLiteral([TStringContent(custom_element.root.to_s)], "'")
-                ),
-              ].compact)
-            ])
-          )
+        ARef(
+          VarRef(Const("CustomElement")),
+          Args([
+            BareAssocHash([
+              Assoc(
+                Label("name:"),
+                StringLiteral([TStringContent(custom_element.name)], "'")
+              ),
+              Assoc(
+                Label("template:"),
+                StringLiteral([TStringContent(custom_element.root.to_s)], "'")
+              ),
+            ].compact)
+          ])
         )
       )
     end
@@ -181,7 +178,10 @@ module VDOM
     end
 
     def build_custom_element(root)
-      element = CustomElement.new
+      id = @custom_elements.size
+      name = const_name_to_custom_element_name("#{@filename}-#{id}")
+      element = CustomElement.new(name, id:)
+      @custom_elements.push(element)
 
       element.root = build_tag(element, root)
 
@@ -193,9 +193,17 @@ module VDOM
         ].compact)
       ].compact
 
-      @custom_elements.push(element)
-
       ARef(VarRef(Const("H")), Args(args))
+    end
+
+    def const_name_to_custom_element_name(str)
+      str
+        .gsub(/[:\/]+/, '꞉꞉')
+        .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1_\2')
+        .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1_\2')
+        .tr("_", "-")
+        .downcase
+        .prepend("rdom-elem-")
     end
 
     def build_tag(custom_element, node)
@@ -226,6 +234,15 @@ module VDOM
               SyntaxTree.parse(value).statements.body
             )
           ]
+        ]
+      end
+
+      if node.children.empty?
+        return Tag[
+          name,
+          attributes,
+          dynamic_attributes,
+          [value.to_s]
         ]
       end
 
@@ -314,15 +331,19 @@ if __FILE__ == $0
       title = props[:title]
       items = ["foo", "bar", "baz"]
     %div
-      %h1(class="title")= title
+      %h1(class="title") My webpage
+      %h2(class="subtitle")= title
       %ul
         = items.map do |item|
           %li(fo=bar){class: i.zero? && "foo"}
             %h3= item
+            %ul
+              = item.each_char.map do |char|
+                %li= char
   HAML
 
   puts "\e[3m SOURCE: \e[0m"
   puts source
   puts "\e[3m TRANSFORMED: \e[0m"
-  puts VDOM::HamlTransform.transform(source)
+  puts VDOM::HamlTransform.transform(source, __FILE__)
 end

@@ -186,24 +186,35 @@ class PatchStream extends TransformStream {
 
 const PatchFunctions = {
   CreateRoot() {
+    // this.nodes.set(null, this.root)
     const root = document.createElement('rdom-root');
     this.nodes.set(null, root);
     this.root.appendChild(root);
     console.warn("ROOT", this.root)
   },
   DestroyRoot() {
-    const root = this.nodes.get(null);
-    if (!root) return;
-    this.nodes.delete(null);
-    root.remove();
+    // const root = this.nodes.get(null);
+    // if (!root) return;
+    // this.nodes.delete(null);
+    // root.remove();
   },
   CreateElement(id, type) {
-    const elem = document.createElement(type);
+    const elem = new (customElements.get(type))
+    // const elem = document.createElement(type);
     elem.setAttribute("id", id)
     this.nodes.set(id, elem)
   },
   InsertBefore(parentId, id, refId) {
     const parent = this.nodes.get(parentId);
+    //
+    // if (!parent) {
+    //   console.error("Could not find parent with id", parentId)
+    //   console.warn("Could not find parent with id", parentId)
+    //   console.log("Could not find parent with id", parentId)
+    //   alert("Could not find parent with id " + parentId)
+    //   return
+    // }
+
     const child = this.nodes.get(id);
     const ref = refId && this.nodes.get(refId);
 
@@ -270,6 +281,17 @@ const PatchFunctions = {
     console.log(slot, nodes.map((slot) => slot))
     slot.assign.apply(slot, nodes)
     console.log(slot)
+  },
+  AssignSlot(id, name, ids) {
+    const node = this.nodes.get(id);
+    if (!node) return
+    if (!node.shadowRoot) {
+      console.log("No shadow root", node)
+      return
+    }
+    const slot = node.shadowRoot.querySelector(`slot[name=${name}]`)
+    const nodes = ids.map((id) => this.nodes.get(id)).filter(Boolean);
+    slot.assign(...nodes);
   },
   CreateTextNode(id, content) {
     this.nodes.set(id, document.createTextNode(content));
