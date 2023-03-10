@@ -8,6 +8,7 @@ require "async/queue"
 require_relative "patches"
 require_relative "descriptor"
 require_relative "text_diff"
+  require "pry"
 
 module VDOM
   module Nodes
@@ -193,6 +194,61 @@ module VDOM
       def with_fragment(id: generate_id)
         patch(Patches::CreateDocumentFragment[id])
         yield id
+      ensure
+        patch(Patches::RemoveNode[id])
+      end
+    end
+
+    class VCustomElement < VNode
+      class VCustomSlot < VNode
+        def run(parent_id, key, descriptor)
+          @parent_id = parent_id
+        end
+
+        def mount_dom_node(id)
+          puts "#{__method__}: #{id.inspect}"
+          patch(Patches::InsertBefore[@dom_id, id, nil])
+          yield
+        ensure
+          patch(Patches::RemoveChild[@dom_id, id])
+        end
+      end
+
+      def run(descriptor)
+        custom_element = descriptor.type
+        closest(VRoot)&.register_custom_element(custom_element)
+
+        elem = Descriptor[custom_element.name.to_sym]
+
+        with_element(elem.type) do
+          slots = diff_slots({}, descriptor.props[:slots])
+
+          receive do |descriptor|
+            slots = diff_slots(slots, descriptor.props[:slots])
+          end
+        end
+      end
+
+      def diff_slots(slots, new_slots)
+        result =
+          new_slots.map do |key, value|
+            if old = slots.delete(key)
+              old.resume(value)
+              [key, old]
+            else
+              [key, VCustomSlot.start(@dom_id, key, value)]
+            end
+          end.to_h
+        slots.values.flatten.each(&:stop)
+        result
+      end
+
+      def with_element(type, id: generate_id)
+        @dom_id = id
+        patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
+        @parent.mount_dom_node(id) do
+          yield
+        end
       ensure
         patch(Patches::RemoveNode[id])
       end
@@ -598,11 +654,14 @@ module VDOM
           VReactively
         in Array
           VFragment
+        in Descriptor[type: VDOM::Component::CustomElement]
+          VCustomElement
         in Descriptor[type: Class]
           VComponent
         in Descriptor[type: :slot]
           VSlot
         in Descriptor[type: Symbol]
+          p type
           VElement
         else
           VText
@@ -615,10 +674,20 @@ module VDOM
         @barrier = Async::Barrier.new(parent: task)
         @patches = Async::Queue.new
         @callbacks = {}
+        @custom_elements = Set.new
         super()
       end
 
       attr_reader :callbacks
+
+      def register_custom_element(custom_element)
+        if @custom_elements.add?(custom_element)
+          patch(Patches::DefineCustomElement[
+            custom_element.name,
+            custom_element.template,
+          ])
+        end
+      end
 
       def patch(patch) =
         @patches.enqueue(patch)
@@ -647,6 +716,7 @@ module VDOM
 
         VChildren.run(nil, descriptor) do |children|
           receive do |descriptor|
+        p descriptor
             children.resume(descriptor)
           end
         end

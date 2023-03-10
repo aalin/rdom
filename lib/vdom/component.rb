@@ -1,14 +1,18 @@
 # frozen_string_literal: true
 
 require_relative "transform"
+require_relative "haml_transform"
 require_relative "descriptor"
 require_relative "reactively"
 require_relative "css_units"
 
 module VDOM
   module Component
+    CustomElement = Data.define(:name, :template)
+
     class Base
       H = VDOM::Descriptor
+      CustomElement = Component::CustomElement
 
       include Reactively::Helpers
 
@@ -60,8 +64,15 @@ module VDOM
           puts "Loading #{path}"
           source = File.read(path)
 
-          # puts "\e[3m SOURCE \e[0m"
-          # puts "\e[33m#{source}\e[0m"
+          puts "\e[3m SOURCE \e[0m"
+          puts "\e[33m#{source}\e[0m"
+
+          if File.extname(filename) == ".haml"
+            source = HamlTransform.transform(source)
+          end
+
+          puts "\e[3m SOURCE \e[0m"
+          puts "\e[33m#{source}\e[0m"
 
           transformed = Transform.transform(source)
 

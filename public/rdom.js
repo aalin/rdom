@@ -230,6 +230,9 @@ const PatchFunctions = {
     }
     this.nodes.delete(id);
   },
+  DefineCustomElement(name, template) {
+    defineCustomElement(name, template)
+  },
   CreateChildren(parentId, id) {
     const parent = this.nodes.get(parentId);
 
@@ -330,3 +333,27 @@ const PatchFunctions = {
     this.enqueue(["pong", time]);
   },
 };
+
+function createTemplate(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  return template
+}
+
+function defineCustomElement(name, html) {
+  const template = createTemplate(html)
+
+  customElements.define(
+    name,
+    class extends HTMLElement {
+      connectedCallback() {
+        this.attachShadow({
+          mode: "open",
+          slotAssignment: "manual",
+        });
+
+        this.shadowRoot.appendChild(template.content.cloneNode(true));
+      }
+    }
+  )
+}

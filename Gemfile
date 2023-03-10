@@ -12,7 +12,9 @@ gem "localhost", "~> 1.1"
 
 gem "pry", "~> 0.14.1"
 
-gem "syntax_tree", "~> 5.1"
+gem "syntax_tree", "~> 6.0"
 gem "syntax_tree-xml", "~> 0.1.0"
 
 gem "minitest", "~> 5.18"
+
+gem "syntax_tree-haml", "~> 3.0"

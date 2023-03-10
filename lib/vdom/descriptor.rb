@@ -39,6 +39,10 @@ module VDOM
         .map { or_string(_1) }
         .compact
 
+    def self.props(*args)
+      nil
+    end
+
     def self.or_string(descriptor)
       case descriptor
       in ^(self)

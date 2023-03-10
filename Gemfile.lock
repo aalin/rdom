@@ -22,11 +22,15 @@ GEM
       fiber-local
     diff-lcs (1.5.0)
     fiber-local (1.0.0)
+    haml (6.1.1)
+      temple (>= 0.8.2)
+      thor
+      tilt
     io-event (1.1.4)
     localhost (1.1.10)
     method_source (1.0.0)
     minitest (5.18.0)
-    prettier_print (1.2.0)
+    prettier_print (1.2.1)
     protocol-hpack (1.4.2)
     protocol-http (0.24.1)
     protocol-http1 (0.15.0)
@@ -37,11 +41,18 @@ GEM
     pry (0.14.1)
       coderay (~> 1.1)
       method_source (~> 1.0)
-    syntax_tree (5.1.0)
+    syntax_tree (6.0.2)
       prettier_print (>= 1.2.0)
+    syntax_tree-haml (3.0.0)
+      haml (>= 5.2, != 6.0.0)
+      prettier_print (>= 1.0.0)
+      syntax_tree (>= 5.0.1)
     syntax_tree-xml (0.1.0)
       prettier_print
       syntax_tree (>= 2.0.1)
+    temple (0.10.0)
+    thor (1.2.1)
+    tilt (2.1.0)
     timers (4.3.5)
     traces (0.8.0)
 
@@ -57,7 +68,8 @@ DEPENDENCIES
   localhost (~> 1.1)
   minitest (~> 5.18)
   pry (~> 0.14.1)
-  syntax_tree (~> 5.1)
+  syntax_tree (~> 6.0)
+  syntax_tree-haml (~> 3.0)
   syntax_tree-xml (~> 0.1.0)
 
 BUNDLED WITH
