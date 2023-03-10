@@ -242,7 +242,7 @@ const PatchFunctions = {
     this.nodes.get(id).setAttribute(name, value);
   },
   RemoveAttribute(id, name) {
-    this.nodes.get(id).removeAttribute(name);
+    this.nodes.get(id)?.removeAttribute(name);
   },
   CreateDocumentFragment(id) {
     this.nodes.set(id, document.createDocumentFragment());
@@ -251,7 +251,7 @@ const PatchFunctions = {
     this.nodes.get(id).style.setProperty(name, value);
   },
   RemoveCSSProperty(id, name) {
-    this.nodes.get(id).style.removeProperty(name);
+    this.nodes.get(id)?.style?.removeProperty(name);
   },
   SetHandler(id, event, callbackId) {
     this.nodes.set(
