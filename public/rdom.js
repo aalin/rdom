@@ -186,10 +186,21 @@ class PatchStream extends TransformStream {
 
 const PatchFunctions = {
   CreateRoot() {
-    this.nodes.set(null, this.root);
+    const root = document.createElement('rdom-root');
+    this.nodes.set(null, root);
+    this.root.appendChild(root);
+    console.warn("ROOT", this.root)
+  },
+  DestroyRoot() {
+    const root = this.nodes.get(null);
+    if (!root) return;
+    this.nodes.delete(null);
+    root.remove();
   },
   CreateElement(id, type) {
-    this.nodes.set(id, document.createElement(type));
+    const elem = document.createElement(type);
+    elem.setAttribute("id", id)
+    this.nodes.set(id, elem)
   },
   InsertBefore(parentId, id, refId) {
     const parent = this.nodes.get(parentId);
@@ -218,6 +229,44 @@ const PatchFunctions = {
       node.remove();
     }
     this.nodes.delete(id);
+  },
+  CreateChildren(parentId, id) {
+    const parent = this.nodes.get(parentId);
+
+    if (!parent) {
+      throw new Error(`Could not find parent with id`, parentId)
+    }
+
+    const node = document.createElement("rdom-children")
+
+    const shadow = node.attachShadow({
+      mode: "open",
+      slotAssignment: "manual"
+    })
+
+    const slot = document.createElement("slot")
+    slot.setAttribute("id", id)
+
+    shadow.append(slot);
+    parent.append(node);
+
+    this.nodes.set(id, node)
+    this.nodes.set(`${id}-slot`, slot)
+  },
+  RemoveChildren(id) {
+    this.nodes.get(id)?.remove();
+    this.nodes.delete(id)
+    this.nodes.get(`${id}-slot`)?.remove();
+    this.nodes.delete(`${id}-slot`)
+  },
+  ReorderChildren(id, ids) {
+    const node = this.nodes.get(`${id}`);
+    const slot = this.slots.get(`${id}-slot`);
+    if (!slot) return
+    const nodes = ids.map((id) => this.nodes.get(id)).filter(Boolean);
+    console.log(slot, nodes.map((slot) => slot))
+    slot.assign.apply(slot, nodes)
+    console.log(slot)
   },
   CreateTextNode(id, content) {
     this.nodes.set(id, document.createTextNode(content));

@@ -41,6 +41,10 @@ module VDOM
         @task = nil
       end
 
+      def inspect
+        "#<#{self.class.name} #{@task.inspect}>"
+      end
+
       def start(...)
         raise "There is already a task!" if @task
 
@@ -368,7 +372,7 @@ module VDOM
       end
     end
 
-    class VChildren < Base
+    class VChildren < VNode
       class Child
         attr_reader :hash
         attr_reader :node
@@ -376,14 +380,11 @@ module VDOM
         attr_accessor :parent_id
         attr_accessor :previous_sibling
         attr_accessor :next_sibling
-        attr_reader :position
 
         def initialize(hash) =
           @hash = hash
 
         def resume(descriptor)
-          @position ||= calculate_position
-
           if @node
             @node.resume(descriptor)
           else
@@ -399,37 +400,59 @@ module VDOM
         def next_dom_id =
           @next_sibling&.dom_id_or_next
         def dom_id_or_next =
-          @node&.dom_id || @next_sibling&.dom_id_or_next
+          dom_id || @next_sibling&.dom_id_or_next
+        def dom_id =
+          @node&.dom_id
+      end
 
-        alias head previous_sibling
-        alias tail next_sibling
-
-        def update_position!
-          if position_changed?
-            @node&.insert!
-            @position = calculate_position
-          end
-        end
-
-        def position_changed? =
-          @position && (head_pos > @position || @position > tail_pos)
-        def calculate_position =
-          head_pos + (tail_pos - head_pos) / 2.0
-        def head_pos =
-          head&.position || head&.head_pos || 0.0
-        def tail_pos =
-          tail&.position || tail&.tail_pos || 1.0
+      def reorder!
+        @reorder&.signal(true)
       end
 
       def run(parent_id, descriptors)
         @parent_id = parent_id
-        children = update_children({}, descriptors)
+        @reorder = Async::Condition.new
 
-        receive do |descriptors|
-          children = update_children(children, descriptors)
+        with_children(parent_id) do
+          children = update_children({}, descriptors)
+
+          async do
+            order = []
+
+            loop do
+              @reorder.wait
+
+              new_order =
+                children
+                  .values
+                  .flatten
+                  .sort_by(&:index)
+                  .map(&:dom_id)
+                  .compact
+
+              next if new_order == order
+              order = new_order
+
+              patch(Patches::ReorderChildren[@slot_id, new_order])
+            end
+          end
+
+          receive do |descriptors|
+            children = update_children(children, descriptors)
+            @reorder.signal
+          end
+        ensure
+          update_children(children, [])
         end
+      end
+
+      def with_children(parent_id, slot_id: generate_id)
+        @slot_id = slot_id
+        patch(Patches::CreateChildren[parent_id, slot_id])
+        yield
       ensure
-        update_children(children, [])
+        patch(Patches::RemoveChildren[slot_id])
+        @slot_id = nil
       end
 
       def update_children(children, descriptors)
@@ -468,13 +491,12 @@ module VDOM
             [nil, *_1, nil]
               .each_cons(3)
               .with_index do |(previous_sibling, child, next_sibling), index|
-                child.parent_id = @parent_id
+                child.parent_id = "#{@slot_id}-slot"
                 child.index = index
                 child.previous_sibling = previous_sibling
                 child.next_sibling = next_sibling
               end
           end
-          .each(&:update_position!)
           .zip(descriptors)
           .map do |child, descriptor|
             child.resume(descriptor)
@@ -503,7 +525,8 @@ module VDOM
       end
 
       def insert!
-        patch(Patches::InsertBefore[@child.parent_id, @dom_id, @child.next_dom_id])
+        patch(Patches::InsertBefore[@child.parent_id, @dom_id, nil])
+        closest(VChildren).reorder!
       end
 
       def mount_dom_node(id)

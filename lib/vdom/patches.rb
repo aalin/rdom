@@ -14,6 +14,10 @@ module VDOM
     RemoveChild = Data.define(:parent_id, :id)
     RemoveNode = Data.define(:id)
 
+    CreateChildren = Data.define(:parent_id, :slot_id)
+    RemoveChildren = Data.define(:slot_id)
+    ReorderChildren = Data.define(:slot_id, :child_ids)
+
     SetAttribute = Data.define(:id, :name, :value)
     RemoveAttribute = Data.define(:id, :name)
 
