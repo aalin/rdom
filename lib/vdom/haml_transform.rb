@@ -273,7 +273,7 @@ module VDOM
     def create_slot(custom_element, children)
       slot = Slot["slot#{custom_element.slots.size}", children]
       custom_element.slots.push(slot)
-      Tag[:slot, { name: slot.name }, {}, []]
+      Tag[:slot, { id: slot.name }, {}, []]
     end
 
     def map_children(custom_element, children)

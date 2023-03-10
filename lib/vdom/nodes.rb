@@ -300,15 +300,9 @@ module VDOM
         UpdateOrder.run(@parent_id, @name, children) do |update_order|
           async do
             loop do
-              puts "updating order #{children.inspect}"
               update_order.resume(children)
-              puts "Waiting to resume"
               @reorder.wait
             end
-
-            puts "\e[32mending\e[0m"
-          ensure
-            puts "\e[31mStopping reorder thing\e[0m"
           end
 
           receive do |descriptors|
@@ -691,7 +685,7 @@ module VDOM
 
       RootElement = Component::CustomElement[
         "rdom-root",
-        '<slot name="children"></slot>'
+        '<slot id="children"></slot>'
       ]
 
       def run(children = nil)

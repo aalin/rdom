@@ -289,7 +289,11 @@ const PatchFunctions = {
       console.log("No shadow root", node)
       return
     }
-    const slot = node.shadowRoot.querySelector(`slot[name=${name}]`)
+    const slot = node.shadowRoot.getElementById(name)
+    if (!slot) {
+      console.log("No slot with id", name)
+      return
+    }
     const nodes = ids.map((id) => this.nodes.get(id)).filter(Boolean);
     slot.assign(...nodes);
   },
