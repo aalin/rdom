@@ -5,6 +5,7 @@
   end
 
   INITIAL_ITEMS = %w[0 1 2 3 4 5 6 7 8 9].map { Item[_1] }.freeze
+
 :ruby
   input = signal("")
   items = signal(INITIAL_ITEMS)
@@ -30,34 +31,40 @@
   reverse = -> { items.value = items.value.reverse }
   clear = -> { items.value = [] }
 
-
-
 %article
   %p This page exists to demonstrate reordering.
-  %div
+  %div(part="rdom-flex")
     %fieldset
       %legend Add
-      %pre
-        = "Input: "
-        = input
-      %div
+      %div(part="rdom-flex")
         %input(type="text" oninput=oninput autocomplete="off" value=input)
         %button(onclick=prepend) Prepend
         %button(onclick=append) Append
     %fieldset
       %legend Actions
-      %div
+      %div(part="rdom-flex")
         %button(onclick=sort) Sort
         %button(onclick=reverse) Reverse
         %button(onclick=shuffle) Shuffle
         %button(onclick=clear) Clear
+  %div(part="rdom-flex")
+    %div(part="rdom-list")
+      = computed do
+        %ul
+          = items.value.map do |item|
+            %li[item.id]= item
     %div
-      %div
-        = computed do
-          %ul
-            = items.value.map do |item|
-              %li[item.id]= item
-      %div
-        %p The order in the list should match this order:
-        = computed do
-          %pre= items.value.map(&:inspect).join("\n")
+      %p The order in the list should match this order:
+      = computed do
+        %pre= items.value.map(&:inspect).join("\n")
+
+:css
+  ::part(rdom-flex) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1em;
+  }
+
+  ::part(rdom-list) {
+    flex: 0 0 10em;
+  }

@@ -144,6 +144,11 @@ module VDOM
       end
 
       def run(descriptor)
+        if descriptor.type.const_defined?(:RDOM_Stylesheet)
+          stylesheet = descriptor.type.const_get(:RDOM_Stylesheet)
+          closest(VRoot)&.register_stylesheet(stylesheet)
+        end
+
         instance = descriptor.type.new(**descriptor.props)
 
         instance.instance_variable_set(:@props, descriptor.props)
@@ -309,7 +314,6 @@ module VDOM
       end
 
       def run(parent_id, ref_id, attributes)
-        p("HELLO")
         vattrs = update_attributes(parent_id, ref_id, {}, attributes)
 
         receive do |attributes|
@@ -639,18 +643,24 @@ module VDOM
         @patches = Async::Queue.new
         @callbacks = {}
         @custom_elements = Set.new
+        @stylesheets = Set.new
         super()
       end
 
       attr_reader :callbacks
 
       def register_custom_element(custom_element)
-        if @custom_elements.add?(custom_element)
-          patch(Patches::DefineCustomElement[
-            custom_element.name,
-            custom_element.template,
-          ])
-        end
+        patch(Patches::DefineCustomElement[
+          custom_element.name,
+          custom_element.template,
+        ]) if @custom_elements.add?(custom_element)
+      end
+
+      def register_stylesheet(stylesheet)
+        patch(Patches::DefineStyleSheet[
+          stylesheet.filename,
+          stylesheet.content,
+        ]) if @stylesheets.add?(stylesheet)
       end
 
       def patch(patch) =

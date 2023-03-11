@@ -282,6 +282,15 @@ const PatchFunctions = {
     slot.assign.apply(slot, nodes)
     console.log(slot)
   },
+  DefineStyleSheet(name, content) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(content);
+
+    this.root.adoptedStyleSheets = [
+      ...this.root.adoptedStyleSheets,
+      sheet,
+    ];
+  },
   AssignSlot(id, name, ids) {
     const node = this.nodes.get(id);
     if (!node) return

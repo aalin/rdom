@@ -120,11 +120,13 @@ module VDOM
           .reject(&:empty?)
           .map { "#{_1}\n" }
           .join
+
       content_hash =
         content
           .then { Digest::SHA256.digest(_1) }
           .then { _1.slice(0, 12).to_s }
           .then { Base64.urlsafe_encode64(_1) }
+
       filename = "#{content_hash}.css"
 
       Assign(
@@ -142,7 +144,6 @@ module VDOM
               0,
               [TStringContent(content)]
             ),
-            StringLiteral([TStringContent(content_hash)], "'"),
           ])
         )
       )
@@ -369,27 +370,37 @@ module VDOM
         in { type: :plain }
           StringLiteral([TStringContent(child.value[:value])], "'")
         in { type: :script }
-          parsed = parse_ruby(child.value[:text])
-
-          visitor = MutationVisitor.new
-          visitor.mutate("Statements[body: [VoidStmt]]") do |node|
-            node.copy(body:
-              child[:children].map do
-                if _1 in { type: :tag }
-                  build_custom_element(_1)
-                else
-                  map_children([_1])
-                end
-              end.flatten
-            )
-          end
-
           create_slot(
             custom_element,
-            parsed.accept(visitor).body,
+            build_script(custom_element, child),
           )
         end
       end
+    end
+
+    def build_script(custom_element, child)
+      parsed = parse_ruby(child.value[:text])
+
+      visitor = MutationVisitor.new
+
+      visitor.mutate("Statements[body: [VoidStmt]]") do |node|
+        node.copy(body:
+          child[:children].map do
+            case _1
+            in { type: :tag } => tag
+              build_custom_element(tag)
+            in { type: :script } => script
+              build_script(custom_element, script)
+            in { type: :tag }
+              build_custom_element(_1)
+            else
+              map_children(custom_element, [_1])
+            end
+          end.flatten
+        )
+      end
+
+      parsed.accept(visitor).body
     end
 
     def fix_syntax_by_adding_missing_pairs(source)

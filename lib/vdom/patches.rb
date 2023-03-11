@@ -17,6 +17,8 @@ module VDOM
     DefineCustomElement = Data.define(:name, :template)
     AssignSlot = Data.define(:parent_id, :name, :node_ids)
 
+    DefineStyleSheet = Data.define(:name, :template)
+
     CreateChildren = Data.define(:parent_id, :slot_id)
     RemoveChildren = Data.define(:slot_id)
     ReorderChildren = Data.define(:slot_id, :child_ids)
