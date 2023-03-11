@@ -255,7 +255,8 @@ module VDOM
       end
 
       class Child
-        def initialize(hash, index: nil)
+        def initialize(parent_id, hash, index: nil)
+          @parent_id = parent_id
           @hash = hash
           @index = nil
         end
@@ -263,7 +264,6 @@ module VDOM
         attr_reader :hash
         attr_reader :node
         attr_accessor :index
-        attr_accessor :parent_id
 
         def dom_id = @node&.dom_id
 
@@ -324,7 +324,7 @@ module VDOM
           .map.with_index do |descriptor, index|
             child =
               children[Descriptor.get_hash(descriptor)]&.shift ||
-                Child.new(Descriptor.get_hash(descriptor))
+                Child.new(@dom_id, Descriptor.get_hash(descriptor))
             child.index = index
             child
           end
@@ -361,28 +361,26 @@ module VDOM
         custom_element = descriptor.type
         closest(VRoot)&.register_custom_element(custom_element)
 
-        elem = Descriptor[custom_element.name.to_sym]
-
-        with_element(elem.type) do
+        with_element(custom_element.name) do
           slots = diff_slots({}, descriptor.props[:slots] || {})
 
           receive do |descriptor|
             slots = diff_slots(slots, descriptor.props[:slots] || {})
           end
+        ensure
+          slots = diff_slots(slots, {})
         end
       end
 
       def diff_slots(slots, new_slots)
-        p(dom_id: @dom_id, new_slots:)
         result =
           new_slots.map do |name, descriptor|
             if slot = slots.delete(name)
               slot.resume(descriptor)
+              [name, slot]
             else
-              slot = VSlotted.start(@dom_id, name, descriptor)
+              [name, VSlotted.start(@dom_id, name, descriptor)]
             end
-
-            [name, slot]
           end.to_h
         slots.values.flatten.each(&:stop)
         result
@@ -398,31 +396,6 @@ module VDOM
         patch(Patches::RemoveNode[id])
       end
     end
-
-    # class VElement < VNode
-    #   def run(descriptor)
-    #     with_element(descriptor.type) do |id|
-    #       VAttributes.run(id, descriptor.props) do |attributes|
-    #         VChildren.run(id, descriptor.children) do |children|
-    #           mount_dom_node(id) do
-    #             receive do |descriptors|
-    #               Array(descriptors).flatten => [descriptor]
-    #               attributes.resume(descriptor.props)
-    #               children.resume(descriptor.children)
-    #             end
-    #           end
-    #         end
-    #       end
-    #     end
-    #   end
-    #
-    #   def with_element(type, id: generate_id)
-    #     patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
-    #     yield id
-    #   ensure
-    #     patch(Patches::RemoveNode[id])
-    #   end
-    # end
 
     class VAttributes < Base
       class VAttr < Base

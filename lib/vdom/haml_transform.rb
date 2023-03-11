@@ -32,7 +32,6 @@ module VDOM
     class CustomElement
       def initialize(name, id: SecureRandom.alphanumeric(5))
         @name = name
-        @class_name = "Partial_#{id}"
         @refs = []
         @props = []
         @slots = []
@@ -40,7 +39,6 @@ module VDOM
       end
 
       attr_accessor :root
-      attr_reader :class_name
       attr_reader :name
       attr_reader :refs
       attr_reader :props
@@ -86,7 +84,7 @@ module VDOM
 
       Program(
         Statements([
-          *@custom_elements.map { define_custom_element(_1) },
+          define_partials(@custom_elements),
           *pre,
           DefNode(
             nil,
@@ -99,24 +97,37 @@ module VDOM
       )
     end
 
-    def define_custom_element(custom_element)
+    def define_partials(custom_elements)
+      return if custom_elements.empty?
+
       Assign(
-        VarField(Const(custom_element.class_name)),
-        ARef(
-          VarRef(Const("CustomElement")),
-          Args([
-            BareAssocHash([
-              Assoc(
-                Label("name:"),
-                StringLiteral([TStringContent(custom_element.name)], "'")
-              ),
-              Assoc(
-                Label("template:"),
-                StringLiteral([TStringContent(custom_element.root.to_s)], "'")
-              ),
-            ].compact)
-          ])
+        VarField(Const("Partials")),
+        ArrayLiteral(
+          LBracket("["),
+          Args(
+            custom_elements.map do
+              define_custom_element(_1)
+            end
+          )
         )
+      )
+    end
+
+    def define_custom_element(custom_element)
+      ARef(
+        VarRef(Const("CustomElement")),
+        Args([
+          BareAssocHash([
+            Assoc(
+              Label("name:"),
+              DynaSymbol([TStringContent(custom_element.name)], "'")
+            ),
+            Assoc(
+              Label("template:"),
+              StringLiteral([TStringContent(custom_element.root.to_s)], "'")
+            ),
+          ].compact)
+        ])
       )
     end
 
@@ -186,7 +197,10 @@ module VDOM
       element.root = build_tag(element, root)
 
       args = [
-        VarRef(Const(element.class_name)),
+        ARef(
+          VarRef(Const("Partials")),
+          Args([Int(id.to_s)]),
+        ),
         BareAssocHash([
           build_slots_assoc(element.slots),
           build_refs_assoc(element.refs),
@@ -300,11 +314,7 @@ module VDOM
               end.flatten
             )
           end
-          #
-          # formatter = SyntaxTree::Formatter.new(child.value[:text], [])
-          # parsed.format(formatter)
-          # formatter.flush
-          #
+
           create_slot(
             custom_element,
             parsed.accept(visitor).body,
