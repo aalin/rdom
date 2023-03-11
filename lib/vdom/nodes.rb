@@ -200,6 +200,144 @@ module VDOM
     #   end
     # end
 
+    class VProps < VNode
+      class VAttr < Base
+        def run(parent_id, ref_id, name, value)
+          loop do
+            catch do |value_changed|
+              p(parent_id:, ref_id:, name:, value:)
+              update_attribute(parent_id, ref_id, name, value) do
+                receive do |new_value|
+                  next if new_value == value
+                  value = new_value
+                  throw(value_changed)
+                end
+              end
+            end
+          end
+        ensure
+          patch(Patches::RemoveAttribute[parent_id, ref_id, name])
+        end
+
+        def update_attribute(parent_id, ref_id, name, value, &)
+          if value in Reactively::API::Readable
+            update_dynamic(parent_id, ref_id, name, value, &)
+          else
+            update_static(parent_id, ref_id, name, value, &)
+          end
+        end
+
+        def update_dynamic(parent_id, ref_id, name, signal, &)
+          effect = Reactively::API::Effect.new do
+            patch(Patches::SetAttribute[parent_id, ref_id, name, signal.value.to_s])
+          end
+
+          yield
+        ensure
+          effect&.dispose!
+        end
+
+        def update_static(parent_id, ref_id, name, value, &)
+          patch(Patches::SetAttribute[parent_id, ref_id, name, value.to_s])
+          yield
+        end
+      end
+
+      class VCallback < Base
+        def run(parent_id, ref_id, name, handler)
+          id = SecureRandom.alphanumeric(32)
+
+          callbacks.store(id, handler)
+
+          patch(Patches::SetHandler[parent_id, ref_id, name, id])
+
+          receive do |handler|
+            callbacks.store(id, handler)
+          end
+        ensure
+          callbacks.delete(id)
+          patch(Patches::RemoveHandler[parent_id, ref_id, name, id])
+        end
+      end
+
+      class VStyles < Base
+        class VStyle < Base
+          def run(element_id, name, value)
+            value = Array(value).join(" ").tr("_", "-")
+            patch(Patches::SetCSSProperty[element_id, name, value])
+
+            receive do |new_value|
+              new_value = Array(new_value).join(" ").tr("_", "-")
+              next if new_value == value
+              value = new_value
+              patch(Patches::SetCSSProperty[element_id, name, value])
+            end
+          ensure
+            patch(Patches::RemoveCSSProperty[element_id, name])
+          end
+        end
+
+        def run(element_id, name, value)
+          vstyles = update_styles(element_id, {}, value)
+
+          receive do |value|
+            vstyles = update_styles(element_id, vstyles, value)
+          end
+        ensure
+          vstyles.each_value(&:stop)
+          patch(Patches::RemoveAttribute[element_id, name])
+        end
+
+        def update_styles(element_id, vstyles, styles)
+          stopped = vstyles.except(*styles.keys)
+          stopped.each_value(&:stop)
+
+          styles.map do |name, value|
+            if old = vstyles[name]
+              old.resume(value)
+              [name, old]
+            else
+              [name, VStyle.start(element_id, name.to_s.tr("_", "-"), value)]
+            end
+          end.to_h
+        end
+      end
+
+      def run(parent_id, ref_id, attributes)
+        p("HELLO")
+        vattrs = update_attributes(parent_id, ref_id, {}, attributes)
+
+        receive do |attributes|
+          vattrs = update_attributes(parent_id, ref_id, vattrs, attributes)
+        end
+      end
+
+      def update_attributes(parent_id, ref_id, vattrs, attributes)
+        stopped = vattrs.except(*attributes.keys)
+        stopped.each_value(&:stop)
+
+        attributes.map do |name, value|
+          if old = vattrs[name]
+            old.resume(value)
+            [name, old]
+          else
+            [name, attr_node_class(name).start(parent_id, ref_id, name.to_s.tr("_", "-"), value)]
+          end
+        end.to_h
+      end
+
+      def attr_node_class(name)
+        case name
+        # in :style
+        #   VStyles
+        in /\Aon/
+          VCallback
+        else
+          VAttr
+        end
+      end
+    end
+
     class VSlotted < VNode
       class UpdateOrder < VNode
         def run(parent_id, slot_name, children)
@@ -363,12 +501,15 @@ module VDOM
 
         with_element(custom_element.name) do
           slots = diff_slots({}, descriptor.props[:slots] || {})
+          refs = diff_refs({}, descriptor.props[:refs] || {})
 
           receive do |descriptor|
             slots = diff_slots(slots, descriptor.props[:slots] || {})
+            refs = diff_refs({}, descriptor.props[:refs] || {})
           end
         ensure
           slots = diff_slots(slots, {})
+          refs = diff_refs(refs, {})
         end
       end
 
@@ -386,6 +527,19 @@ module VDOM
         result
       end
 
+      def diff_refs(refs, new_refs)
+        result =
+          new_refs.map do |name, props|
+            if ref = refs.delete(name)
+              ref.resume(props)
+              [name, ref]
+            else
+              [name, VProps.start(@dom_id, name, props)]
+            end
+          end.to_h
+        refs.values.flatten.each(&:stop)
+      end
+
       def with_element(type, id: generate_id)
         @dom_id = id
         patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
@@ -394,142 +548,6 @@ module VDOM
         end
       ensure
         patch(Patches::RemoveNode[id])
-      end
-    end
-
-    class VAttributes < Base
-      class VAttr < Base
-        def run(element_id, name, value)
-          loop do
-            catch do |value_changed|
-              update_attribute(element_id, name, value) do
-                receive do |new_value|
-                  next if new_value == value
-                  value = new_value
-                  throw(value_changed)
-                end
-              end
-            end
-          end
-        ensure
-          patch(Patches::RemoveAttribute[element_id, name])
-        end
-
-        def update_attribute(element_id, name, value, &)
-          if value in Reactively::API::Readable
-            update_dynamic(element_id, name, value, &)
-          else
-            update_static(element_id, name, value, &)
-          end
-        end
-
-        def update_dynamic(element_id, name, signal, &)
-          effect = Reactively::API::Effect.new do
-            patch(Patches::SetAttribute[element_id, name, signal.value.to_s])
-          end
-
-          yield
-        ensure
-          effect&.dispose!
-        end
-
-        def update_static(element_id, name, value, &)
-          patch(Patches::SetAttribute[element_id, name, value.to_s])
-          yield
-        end
-      end
-
-      class VCallback < Base
-        def run(element_id, name, handler)
-          id = SecureRandom.alphanumeric(32)
-
-          callbacks.store(id, handler)
-
-          patch(Patches::SetHandler[element_id, name, id])
-
-          receive do |handler|
-            callbacks.store(id, handler)
-          end
-        ensure
-          callbacks.delete(id)
-          patch(Patches::RemoveHandler[element_id, name, id])
-        end
-      end
-
-      class VStyles < Base
-        class VStyle < Base
-          def run(element_id, name, value)
-            value = Array(value).join(" ").tr("_", "-")
-            patch(Patches::SetCSSProperty[element_id, name, value])
-
-            receive do |new_value|
-              new_value = Array(new_value).join(" ").tr("_", "-")
-              next if new_value == value
-              value = new_value
-              patch(Patches::SetCSSProperty[element_id, name, value])
-            end
-          ensure
-            patch(Patches::RemoveCSSProperty[element_id, name])
-          end
-        end
-
-        def run(element_id, name, value)
-          vstyles = update_styles(element_id, {}, value)
-
-          receive do |value|
-            vstyles = update_styles(element_id, vstyles, value)
-          end
-        ensure
-          vstyles.each_value(&:stop)
-          patch(Patches::RemoveAttribute[element_id, name])
-        end
-
-        def update_styles(element_id, vstyles, styles)
-          stopped = vstyles.except(*styles.keys)
-          stopped.each_value(&:stop)
-
-          styles.map do |name, value|
-            if old = vstyles[name]
-              old.resume(value)
-              [name, old]
-            else
-              [name, VStyle.start(element_id, name.to_s.tr("_", "-"), value)]
-            end
-          end.to_h
-        end
-      end
-
-      def run(element_id, attributes)
-        vattrs = update_attributes(element_id, {}, attributes)
-
-        receive do |attributes|
-          vattrs = update_attributes(element_id, vattrs, attributes)
-        end
-      end
-
-      def update_attributes(element_id, vattrs, attributes)
-        stopped = vattrs.except(*attributes.keys)
-        stopped.each_value(&:stop)
-
-        attributes.map do |name, value|
-          if old = vattrs[name]
-            old.resume(value)
-            [name, old]
-          else
-            [name, attr_node_class(name).start(element_id, name.to_s.tr("_", "-"), value)]
-          end
-        end.to_h
-      end
-
-      def attr_node_class(name)
-        case name
-        in :style
-          VStyles
-        in /\Aon/
-          VCallback
-        else
-          VAttr
-        end
       end
     end
 

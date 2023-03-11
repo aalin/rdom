@@ -1,8 +1,12 @@
 :ruby
   # setup
 :ruby
-  items = %w[foo bar baz]
+  items = %w[hello world hola mundo]
 %div
   %ul
     = items.map do |item|
-      %li= item
+      %li{key: item}
+        %h3= item
+        %ul
+          = item.each_char.with_index.map do |char, i|
+            %li{key: i}= char

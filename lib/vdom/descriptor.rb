@@ -40,7 +40,7 @@ module VDOM
         .compact
 
     def self.props(*args)
-      nil
+      args.reduce({}, &:merge)
     end
 
     def self.or_string(descriptor)

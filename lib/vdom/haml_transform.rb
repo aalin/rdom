@@ -33,7 +33,6 @@ module VDOM
       def initialize(name, id: SecureRandom.alphanumeric(5))
         @name = name
         @refs = []
-        @props = []
         @slots = []
         @root = nil
       end

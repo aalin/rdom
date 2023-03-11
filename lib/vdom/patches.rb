@@ -21,11 +21,11 @@ module VDOM
     RemoveChildren = Data.define(:slot_id)
     ReorderChildren = Data.define(:slot_id, :child_ids)
 
-    SetAttribute = Data.define(:id, :name, :value)
-    RemoveAttribute = Data.define(:id, :name)
+    SetAttribute = Data.define(:parent_id, :ref_id, :name, :value)
+    RemoveAttribute = Data.define(:parent_id, :ref_id, :name)
 
-    SetHandler = Data.define(:id, :name, :handler_id)
-    RemoveHandler = Data.define(:id, :name, :handler_id)
+    SetHandler = Data.define(:parent_id, :ref_id, :name, :handler_id)
+    RemoveHandler = Data.define(:parent_id, :ref_id, :name, :handler_id)
 
     SetCSSProperty = Data.define(:id, :name, :value)
     RemoveCSSProperty = Data.define(:id, :name)

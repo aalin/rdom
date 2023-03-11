@@ -331,10 +331,13 @@ const PatchFunctions = {
   RemoveCSSProperty(id, name) {
     this.nodes.get(id)?.style?.removeProperty(name);
   },
-  SetHandler(id, event, callbackId) {
+  SetHandler(parentId, refId, event, callbackId) {
+    const parent = this.nodes.get(parentId)
+    const elem = parent.shadowRoot.getElementById(refId);
+
     this.nodes.set(
       callbackId,
-      this.nodes.get(id).addEventListener(event.replace(/^on/, ""), (e) => {
+      elem.addEventListener(event.replace(/^on/, ""), (e) => {
         const payload = {
           type: e.type,
           target: e.target && {
@@ -346,10 +349,12 @@ const PatchFunctions = {
       })
     );
   },
-  RemoveHandler(id, event, callbackId) {
-    this.nodes
-      .get(id)
-      ?.removeEventListener(
+  RemoveHandler(parentId, refId, event, callbackId) {
+    const parent = this.nodes.get(parentId)
+    if (!parentId) return
+    const elem = parent.shadowRoot?.getElementById(refId);
+
+    elem?.removeEventListener(
         event.replace(/^on/, ""),
         this.nodes.get(callbackId)
       );
