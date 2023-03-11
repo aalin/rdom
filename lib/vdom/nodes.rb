@@ -435,7 +435,7 @@ module VDOM
 
         children = update_children({}, descriptors)
 
-        UpdateOrder.run(@parent_id, @name, children) do |update_order|
+        UpdateOrder.run(parent_id, name, children) do |update_order|
           async do
             loop do
               update_order.resume(children)
@@ -444,9 +444,12 @@ module VDOM
           end
 
           receive do |descriptors|
-            children = update_children({}, descriptors)
+            children = update_children(children, descriptors)
             reorder!
           end
+        ensure
+          children.each_value(&:stop)
+          children.clear
         end
       end
 
@@ -505,7 +508,7 @@ module VDOM
 
           receive do |descriptor|
             slots = diff_slots(slots, descriptor.props[:slots] || {})
-            refs = diff_refs({}, descriptor.props[:refs] || {})
+            refs = diff_refs(refs, descriptor.props[:refs] || {})
           end
         ensure
           slots = diff_slots(slots, {})
@@ -538,6 +541,7 @@ module VDOM
             end
           end.to_h
         refs.values.flatten.each(&:stop)
+        result
       end
 
       def with_element(type, id: generate_id)
