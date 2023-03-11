@@ -361,13 +361,13 @@ const PatchFunctions = {
   },
   RemoveHandler(parentId, refId, event, callbackId) {
     const parent = this.nodes.get(parentId)
-    if (!parentId) return
+    if (!parent) return
     const elem = parent.shadowRoot?.getElementById(refId);
 
     elem?.removeEventListener(
-        event.replace(/^on/, ""),
-        this.nodes.get(callbackId)
-      );
+      event.replace(/^on/, ""),
+      this.nodes.get(callbackId)
+    );
     this.nodes.delete(callbackId);
   },
   Ping(time) {
