@@ -82,6 +82,7 @@ module VDOM
       def patch_loop(vroot)
         while patch = vroot.take
           @output.enqueue(VDOM::Patches.serialize(patch))
+          # Uncomment the following line to add some latency
           # sleep 0.01
         end
       rescue IOError, Errno::EPIPE, Protocol::HTTP2::ProtocolError => e

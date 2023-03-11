@@ -54,6 +54,9 @@ module VDOM
     Ref = Data.define(:name, :props)
     Prop = Data.define(:name, :expressions)
 
+    PARTIALS_CONST_NAME = "RDOM_Partials"
+    CLASS_SEPARATOR = '꞉꞉' # U+A789
+
     include SyntaxTree::DSL
 
     def initialize(filename)
@@ -104,7 +107,7 @@ module VDOM
       return if custom_elements.empty?
 
       Assign(
-        VarField(Const("Partials")),
+        VarField(Const(PARTIALS_CONST_NAME)),
         ArrayLiteral(
           LBracket("["),
           Args(
@@ -205,7 +208,7 @@ module VDOM
 
       args = [
         ARef(
-          VarRef(Const("Partials")),
+          VarRef(Const(PARTIALS_CONST_NAME)),
           Args([Int(id.to_s)]),
         ),
         BareAssocHash([
@@ -225,9 +228,9 @@ module VDOM
 
     def const_name_to_custom_element_name(str)
       str
-        .gsub(/[:\/]+/, '꞉꞉')
-        .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1_\2')
-        .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1_\2')
+        .gsub(/[:\/]+/, CLASS_SEPARATOR)
+        .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1-\2')
+        .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1-\2')
         .tr("_", "-")
         .downcase
         .prepend("rdom-elem-")
@@ -275,7 +278,7 @@ module VDOM
           key,
           attributes,
           dynamic_attributes,
-          [value.to_s]
+          [value].compact
         ]
       end
 

@@ -1,6 +1,20 @@
 :ruby
   def self.title = "Start"
+:ruby
+  size = signal(50)
+
+  percent = computed { "#{size.value}%" }
+
+  oninput = ->(target:, **) do
+    size.value = target[:value].to_i
+  end
 
 %article
   %h2 Start page
   %p This webpage is written in Ruby and updates are streamed to your browser via http/2 streams.
+  %fieldset
+    %legend Play with image sizes
+    %p
+      %input(type="range" min="1" max="100" step="1" oninput=oninput value=size)
+    %p
+      %img(src="/favicon.ico" width=percent)

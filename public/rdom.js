@@ -315,20 +315,17 @@ const PatchFunctions = {
   SetAttribute(parentId, refId, name, value) {
     const parent = this.nodes.get(parentId)
     const node = parent.shadowRoot?.getElementById(refId)
-
-    if (!node) {
-      return
-    }
+    if (!node) return
 
     if (name === "value") {
-      console.log("Setting value of", node, "to", value)
       node.value = value;
-      return;
+    } else {
+      node.setAttribute(name, value);
     }
-    node.setAttribute(name, value);
   },
   RemoveAttribute(parentId, refId, name) {
     const parent = this.nodes.get(parentId)
+    if (!parent) return
     const node = parent.shadowRoot?.getElementById(refId)
     node?.removeAttribute(name);
   },
