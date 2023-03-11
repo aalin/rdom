@@ -30,13 +30,7 @@
   reverse = -> { items.value = items.value.reverse }
   clear = -> { items.value = [] }
 
-- list = computed do
-  %ul
-    = items.value.map do |item|
-      %li{key: item.id}= item
 
-- joined = computed do
-  %pre= items.value.map(&:inspect).join("\n")
 
 %article
   %p This page exists to demonstrate reordering.
@@ -58,7 +52,12 @@
         %button(onclick=shuffle) Shuffle
         %button(onclick=clear) Clear
     %div
-      %div= list
+      %div
+        = computed do
+          %ul
+            = items.value.map do |item|
+              %li[item.id]= item
       %div
         %p The order in the list should match this order:
-        = joined
+        = computed do
+          %pre= items.value.map(&:inspect).join("\n")

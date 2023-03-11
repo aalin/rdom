@@ -44,7 +44,7 @@ module VDOM
       attr_reader :slots
     end
 
-    Tag = Data.define(:name, :attrs, :props, :children) do
+    Tag = Data.define(:name, :key, :attrs, :props, :children) do
       def to_s
         "<#{name}#{attrs.map { format(' %s="%s"', _1, _2) }.join}>#{children.join}</#{name}>"
       end
@@ -139,6 +139,10 @@ module VDOM
     end
 
     def wrap_multiple_statements_in_begin_and_end(statements)
+      if statements in SyntaxTree::Statements
+        return wrap_multiple_statements_in_begin_and_end(statements.body)
+      end
+
       if statements.size == 1
         statements.first
       else
@@ -207,6 +211,12 @@ module VDOM
         BareAssocHash([
           build_slots_assoc(element.slots),
           build_refs_assoc(element.refs),
+          if key = element.root.key
+            Assoc(
+              Label("key:"),
+              wrap_multiple_statements_in_begin_and_end(key)
+            )
+          end
         ].compact)
       ].compact
 
@@ -225,8 +235,12 @@ module VDOM
 
     def build_tag(custom_element, node)
       node.value => {
-        name:, attributes:, dynamic_attributes:, self_closing:, value:, parse:
+        name:, attributes:, dynamic_attributes:, self_closing:, value:, parse:, object_ref:
       }
+
+      if object_ref in String
+        key = parse_ruby(object_ref, fix: false)
+      end
 
       if dynamic_attributes.old || dynamic_attributes.new
         ref = Ref[
@@ -243,6 +257,7 @@ module VDOM
       if parse
         return Tag[
           name,
+          key,
           attributes,
           dynamic_attributes,
           [
@@ -257,6 +272,7 @@ module VDOM
       if node.children.empty?
         return Tag[
           name,
+          key,
           attributes,
           dynamic_attributes,
           [value.to_s]
@@ -265,6 +281,7 @@ module VDOM
 
       Tag[
         name,
+        key,
         attributes,
         dynamic_attributes,
         map_children(custom_element, node.children)
@@ -290,13 +307,15 @@ module VDOM
     def create_slot(custom_element, children)
       slot = Slot["slot#{custom_element.slots.size}", children]
       custom_element.slots.push(slot)
-      Tag[:slot, { id: slot.name }, {}, []]
+      Tag[:slot, nil, { id: slot.name }, {}, []]
     end
 
-    def parse_ruby(code)
-      SyntaxTree.parse(
-        fix_syntax_by_adding_missing_pairs(code)
-      ).statements
+    def parse_ruby(code, fix: true)
+      if fix
+        code = fix_syntax_by_adding_missing_pairs(code)
+      end
+
+      SyntaxTree.parse(code).statements
     end
 
     def map_children(custom_element, children)
