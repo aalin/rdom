@@ -312,15 +312,25 @@ const PatchFunctions = {
   DeleteData(id, offset, count) {
     this.nodes.get(id).deleteData(offset, count);
   },
-  SetAttribute(id, name, value) {
+  SetAttribute(parentId, refId, name, value) {
+    const parent = this.nodes.get(parentId)
+    const node = parent.shadowRoot?.getElementById(refId)
+
+    if (!node) {
+      return
+    }
+
     if (name === "value") {
-      this.nodes.get(id).value = value;
+      console.log("Setting value of", node, "to", value)
+      node.value = value;
       return;
     }
-    this.nodes.get(id).setAttribute(name, value);
+    node.setAttribute(name, value);
   },
-  RemoveAttribute(id, name) {
-    this.nodes.get(id)?.removeAttribute(name);
+  RemoveAttribute(parentId, refId, name) {
+    const parent = this.nodes.get(parentId)
+    const node = parent.shadowRoot?.getElementById(refId)
+    node?.removeAttribute(name);
   },
   CreateDocumentFragment(id) {
     this.nodes.set(id, document.createDocumentFragment());

@@ -61,6 +61,10 @@ module VDOM
       @custom_elements = []
     end
 
+    def visit_silent_script(node)
+      parse_ruby(node.value[:text])
+    end
+
     def visit_filter(node)
       case node.value
       in { name: "ruby", text: }
@@ -289,6 +293,12 @@ module VDOM
       Tag[:slot, { id: slot.name }, {}, []]
     end
 
+    def parse_ruby(code)
+      SyntaxTree.parse(
+        fix_syntax_by_adding_missing_pairs(code)
+      ).statements
+    end
+
     def map_children(custom_element, children)
       children.map do |child|
         case child
@@ -297,9 +307,7 @@ module VDOM
         in { type: :plain }
           StringLiteral([TStringContent(child.value[:value])], "'")
         in { type: :script }
-          parsed = SyntaxTree.parse(
-            fix_syntax_by_adding_missing_pairs(child.value[:text])
-          ).statements
+          parsed = parse_ruby(child.value[:text])
 
           visitor = MutationVisitor.new
           visitor.mutate("Statements[body: [VoidStmt]]") do |node|

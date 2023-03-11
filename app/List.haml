@@ -1,0 +1,64 @@
+:ruby
+  Item = Data.define(:value) do
+    def id = object_id
+    def to_s = value.to_s
+  end
+
+  INITIAL_ITEMS = %w[0 1 2 3 4 5 6 7 8 9].map { Item[_1] }.freeze
+:ruby
+  input = signal("")
+  items = signal(INITIAL_ITEMS)
+
+  oninput = ->(target:, **) do
+    input.value = target[:value].to_s.strip
+  end
+
+  prepend = -> do
+    break if input.value.empty?
+    items.value = [Item[input.value], *items.value]
+    input.value = ""
+  end
+
+  append = -> do
+    break if input.value.empty?
+    items.value = [*items.value, Item[input.value]]
+    input.value = ""
+  end
+
+  sort = -> { items.value = items.value.sort_by(&:value) }
+  shuffle = -> { items.value = items.value.shuffle }
+  reverse = -> { items.value = items.value.reverse }
+  clear = -> { items.value = [] }
+
+- list = computed do
+  %ul
+    = items.value.map do |item|
+      %li{key: item.id}= item
+
+- joined = computed do
+  %pre= items.value.map(&:inspect).join("\n")
+
+%article
+  %p This page exists to demonstrate reordering.
+  %div
+    %fieldset
+      %legend Add
+      %pre
+        = "Input: "
+        = input
+      %div
+        %input(type="text" oninput=oninput autocomplete="off" value=input)
+        %button(onclick=prepend) Prepend
+        %button(onclick=append) Append
+    %fieldset
+      %legend Actions
+      %div
+        %button(onclick=sort) Sort
+        %button(onclick=reverse) Reverse
+        %button(onclick=shuffle) Shuffle
+        %button(onclick=clear) Clear
+    %div
+      %div= list
+      %div
+        %p The order in the list should match this order:
+        = joined

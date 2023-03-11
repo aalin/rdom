@@ -66,6 +66,14 @@ module VDOM
 
       protected
 
+      def receive(&)
+        if block_given?
+          loop { yield(*@incoming.dequeue) }
+        else
+          @incoming.dequeue
+        end
+      end
+
       def closest(klass)
         if klass === self
           self
@@ -76,8 +84,6 @@ module VDOM
 
       def async(&) =
         (@task || @parent || Async::Task.current).async(&)
-      def receive(&) =
-        loop { yield(*@incoming.dequeue) }
       def hierarchy =
         [*@parent&.hierarchy, self]
       def running? =
@@ -95,8 +101,7 @@ module VDOM
     end
 
     class VNode < Base
-      def generate_id =
-        SecureRandom.alphanumeric(5)
+      def generate_id = SecureRandom.alphanumeric(5)
     end
 
     class VText < VNode
@@ -363,10 +368,15 @@ module VDOM
       end
 
       class VSlottedChild < Base
+        attr_accessor :index
+        attr_accessor :hash
         attr_reader :dom_id
 
-        def run(child, descriptor)
-          @child = child
+        def run(parent_id, descriptor)
+          @parent_id = parent_id
+          # @hash = Descriptor.get_hash(descriptor.hash)
+
+          descriptor = receive
 
           VAny.run(descriptor) do |vnode|
             receive do |descriptor|
@@ -376,7 +386,7 @@ module VDOM
         end
 
         def insert!
-          patch(Patches::InsertBefore[@child.parent_id, @dom_id, nil])
+          patch(Patches::InsertBefore[child.parent_id, @dom_id, nil])
         end
 
         def mount_dom_node(id)
@@ -392,33 +402,6 @@ module VDOM
         end
       end
 
-      class Child
-        def initialize(parent_id, hash, index: nil)
-          @parent_id = parent_id
-          @hash = hash
-          @index = nil
-        end
-
-        attr_reader :hash
-        attr_reader :node
-        attr_accessor :index
-
-        def dom_id = @node&.dom_id
-
-        def resume(descriptor)
-          if @node
-            @node.resume(descriptor)
-          else
-            @node = VSlottedChild.start(self, descriptor)
-          end
-
-          self
-        end
-
-        def stop =
-          @node&.stop
-      end
-
       def reorder!
         if cond = @reorder
           puts "\e[3;33mSignalling!!\e[0m"
@@ -432,23 +415,29 @@ module VDOM
         @reorder = Async::Condition.new
         @parent_id = parent_id
         @name = name
+        @semaphore = Async::Semaphore.new(1)
 
         children = update_children({}, descriptors)
 
         UpdateOrder.run(parent_id, name, children) do |update_order|
           async do
             loop do
-              update_order.resume(children)
+              @semaphore.acquire do
+                update_order.resume(children)
+              end
+
               @reorder.wait
             end
           end
 
           receive do |descriptors|
-            children = update_children(children, descriptors)
-            reorder!
+            @semaphore.acquire do
+              children = update_children(children, descriptors)
+              reorder!
+            end
           end
         ensure
-          children.each_value(&:stop)
+          children.values.flatten.each(&:stop)
           children.clear
         end
       end
@@ -463,11 +452,16 @@ module VDOM
       def diff_children(children, descriptors)
         descriptors
           .map.with_index do |descriptor, index|
-            child =
-              children[Descriptor.get_hash(descriptor)]&.shift ||
-                Child.new(@dom_id, Descriptor.get_hash(descriptor))
-            child.index = index
-            child
+            if found = children[Descriptor.get_hash(descriptor)]&.shift
+              found.index = index
+              found
+            else
+              child = VSlottedChild.new
+              child.hash = Descriptor.get_hash(descriptor)
+              child.index = index
+              child.start(@dom_id, descriptor)
+              child
+            end
           end
           .zip(descriptors)
           .map do |child, descriptor|
@@ -610,6 +604,7 @@ module VDOM
 
       def unwrap(descriptor)
         case Array(descriptor).compact.flatten
+        in [] then ""
         in [one] then one
         in [*many] then many
         end
