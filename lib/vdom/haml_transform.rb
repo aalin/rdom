@@ -55,12 +55,14 @@ module VDOM
     Prop = Data.define(:name, :expressions)
 
     PARTIALS_CONST_NAME = "RDOM_Partials"
+    STYLES_CONST_NAME = "RDOM_Stylesheet"
     CLASS_SEPARATOR = '꞉꞉' # U+A789
 
     include SyntaxTree::DSL
 
     def initialize(filename)
       @filename = filename
+      @styles = []
       @custom_elements = []
     end
 
@@ -72,6 +74,9 @@ module VDOM
       case node.value
       in { name: "ruby", text: }
         SyntaxTree.parse(text.to_s).statements
+      in { name: "css", text: }
+        @styles.push(text)
+        nil
       end
     end
 
@@ -86,10 +91,11 @@ module VDOM
 
       children = children.map do |child|
         child.accept(self)
-      end
+      end.compact
 
       Program(
         Statements([
+          define_stylesheets(@styles),
           define_partials(@custom_elements),
           *pre,
           DefNode(
@@ -99,7 +105,46 @@ module VDOM
             nil,
             BodyStmt(Statements(children), nil, nil, nil, nil)
           ),
-        ])
+        ].compact)
+      )
+    end
+
+    def define_stylesheets(styles)
+      return if styles.empty?
+
+      content =
+        styles
+          .join("\n")
+          .each_line
+          .map(&:strip)
+          .reject(&:empty?)
+          .map { "#{_1}\n" }
+          .join
+      content_hash =
+        content
+          .then { Digest::SHA256.digest(_1) }
+          .then { _1.slice(0, 12).to_s }
+          .then { Base64.urlsafe_encode64(_1) }
+      filename = "#{content_hash}.css"
+
+      Assign(
+        VarField(Const(STYLES_CONST_NAME)),
+        ARef(
+          ConstPathRef(
+            VarRef(Const("VDOM")),
+            VarRef(Const("StyleSheet")),
+          ),
+          Args([
+            StringLiteral([TStringContent(filename)], "'"),
+            Heredoc(
+              HeredocBeg("<<CSS"),
+              HeredocEnd("CSS"),
+              0,
+              [TStringContent(content)]
+            ),
+            StringLiteral([TStringContent(content_hash)], "'"),
+          ])
+        )
       )
     end
 
@@ -121,18 +166,13 @@ module VDOM
 
     def define_custom_element(custom_element)
       ARef(
-        VarRef(Const("CustomElement")),
+        ConstPathRef(
+          VarRef(Const("VDOM")),
+          VarRef(Const("CustomElement")),
+        ),
         Args([
-          BareAssocHash([
-            Assoc(
-              Label("name:"),
-              DynaSymbol([TStringContent(custom_element.name)], "'")
-            ),
-            Assoc(
-              Label("template:"),
-              StringLiteral([TStringContent(custom_element.root.to_s)], "'")
-            ),
-          ].compact)
+          DynaSymbol([TStringContent(custom_element.name)], "'"),
+          StringLiteral([TStringContent(custom_element.root.to_s)], "'"),
         ])
       )
     end

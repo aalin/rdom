@@ -1,0 +1,15 @@
+:ruby
+  def self.title = "Styles"
+
+%article
+  %h2 Style demo
+  %p Stylesheet demo
+  %fieldset
+    %legend Play with image sizes
+    %p
+      %img(src="/favicon.ico" part="rdom-image")
+
+:css
+  ::part(rdom-image) {
+    border: 1px solid #f0f;
+  }

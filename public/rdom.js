@@ -313,8 +313,11 @@ const PatchFunctions = {
     this.nodes.get(id).deleteData(offset, count);
   },
   SetAttribute(parentId, refId, name, value) {
-    const parent = this.nodes.get(parentId)
-    const node = parent.shadowRoot?.getElementById(refId)
+    const node =
+      parentId
+      ? this.nodes.get(parentId)?.shadowRoot?.getElementById(refId)
+      : this.nodes.get(refId);
+
     if (!node) return
 
     if (name === "value") {

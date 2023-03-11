@@ -3,16 +3,14 @@
 require_relative "transform"
 require_relative "haml_transform"
 require_relative "descriptor"
+require_relative "custom_element"
 require_relative "reactively"
 require_relative "css_units"
 
 module VDOM
   module Component
-    CustomElement = Data.define(:name, :template)
-
     class Base
       H = VDOM::Descriptor
-      CustomElement = Component::CustomElement
 
       include Reactively::Helpers
 

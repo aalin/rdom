@@ -7,6 +7,7 @@ require "async/condition"
 require "async/queue"
 require_relative "patches"
 require_relative "descriptor"
+require_relative "custom_element"
 require_relative "text_diff"
   require "pry"
 
@@ -210,7 +211,6 @@ module VDOM
         def run(parent_id, ref_id, name, value)
           loop do
             catch do |value_changed|
-              p(parent_id:, ref_id:, name:, value:)
               update_attribute(parent_id, ref_id, name, value) do
                 receive do |new_value|
                   next if new_value == value
@@ -541,6 +541,8 @@ module VDOM
       def with_element(type, id: generate_id)
         @dom_id = id
         patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
+        patch(Patches::SetAttribute[nil, id, "exportparts", "rdom-*"])
+
         @parent.mount_dom_node(id) do
           yield
         end
@@ -616,7 +618,7 @@ module VDOM
           VReactively
         in Array
           VFragment
-        in Descriptor[type: VDOM::Component::CustomElement]
+        in Descriptor[type: CustomElement]
           VCustomElement
         in Descriptor[type: Class]
           VComponent
@@ -673,7 +675,7 @@ module VDOM
         end
       end
 
-      RootElement = Component::CustomElement[
+      RootElement = CustomElement[
         "rdom-root",
         '<slot id="children"></slot>'
       ]
