@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby -rbundler
+
+require_relative "../lib/vdom/transform"
+require_relative "../lib/vdom/haml_transform"
+
+filename =
+  case ARGF.filename
+  in "-" then "stdin"
+  in filename then filename
+  end
+
+ARGF
+  .read
+  .then { VDOM::HamlTransform.transform(_1, filename) }
+  .then { VDOM::Transform.transform(_1) }
+  .then { puts(_1) }
