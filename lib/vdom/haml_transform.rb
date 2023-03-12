@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "digest/sha2"
+require "base64"
 require "syntax_tree"
 require "syntax_tree/haml"
 require "syntax_suggest"
@@ -187,10 +189,13 @@ module VDOM
         return wrap_multiple_statements_in_begin_and_end(statements.body)
       end
 
-      if statements.size == 1
-        statements.first
-      else
-        Begin(Statements(statements))
+      case statements
+      in []
+        VarRef(Kw("nil"))
+      in [one]
+        one
+      in [*many]
+        Begin(Statements(many))
       end
     end
 
@@ -221,18 +226,7 @@ module VDOM
           refs.map do |ref|
             Assoc(
               Label("#{ref.name}:"),
-              CallNode(
-                VarRef(Const("H")),
-                Period("."),
-                Ident("props"),
-                ArgParen(
-                  Args(
-                    ref.props.map do |prop|
-                      wrap_multiple_statements_in_begin_and_end(Array(prop))
-                    end
-                  )
-                )
-              )
+              build_props(ref.props),
             )
           end
         )
@@ -279,7 +273,7 @@ module VDOM
 
     def build_tag(custom_element, node)
       node.value => {
-        name:, attributes:, dynamic_attributes:, self_closing:, value:, parse:, object_ref:
+        name:, attributes:, dynamic_attributes:, value:, parse:, object_ref:
       }
 
       if object_ref in String
@@ -342,7 +336,7 @@ module VDOM
       visitor = MutationVisitor.new
 
       visitor.mutate("Assoc[key: StringLiteral]") do |node|
-        node.copy(key: SymbolLiteral(Ident(node.key.parts.map(&:value).join)))
+        node.copy(key: SymbolLiteral(Ident(node.key.parts.map(&:value).join.tr("-", "_"))))
       end
 
       SyntaxTree.parse(attrs).statements.accept(visitor)
@@ -366,9 +360,18 @@ module VDOM
       children.map do |child|
         case child
         in { type: :tag }
-          build_tag(custom_element, child)
+          name = child.value[:name].to_s
+          if name[0].upcase == name[0]
+            create_slot(
+              custom_element,
+              build_component(custom_element, child)
+            )
+          else
+            build_tag(custom_element, child)
+          end
         in { type: :plain }
-          StringLiteral([TStringContent(child.value[:value])], "'")
+          # StringLiteral([TStringContent(child.value[:text])], "'")
+          child.value[:text]
         in { type: :script }
           create_slot(
             custom_element,
@@ -376,6 +379,53 @@ module VDOM
           )
         end
       end
+    end
+
+    def build_props(props)
+      CallNode(
+        VarRef(Const("H")),
+        Period("."),
+        Ident("props"),
+        ArgParen(
+          Args(
+            props.map do |prop|
+              wrap_multiple_statements_in_begin_and_end(Array(prop))
+            end
+          )
+        )
+      )
+    end
+
+    def build_component(custom_element, node)
+      node.value => {
+        name:, attributes:, dynamic_attributes:, value:, parse:, object_ref:
+      }
+
+      if object_ref in String
+        key = parse_ruby(object_ref, fix: false)
+      end
+
+      props = [
+        *build_old_dynamic_attributes(custom_element, dynamic_attributes.old),
+        *build_new_dynamic_attributes(dynamic_attributes.new),
+      ].map(&:body).flatten.compact
+
+      args = [
+        VarRef(Const(name.to_s)),
+        BareAssocHash([
+          if key
+            Assoc(
+              Label("key:"),
+              wrap_multiple_statements_in_begin_and_end(key)
+            )
+          end,
+          unless props.empty?
+            AssocSplat(build_props(props))
+          end,
+        ].compact),
+      ]
+
+      [ARef(VarRef(Const("H")), Args(args))]
     end
 
     def build_script(custom_element, child)

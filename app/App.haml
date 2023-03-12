@@ -1,27 +1,12 @@
 :ruby
   StartPage = import("StartPage.haml")
-  # Counter = import("Counter.rb")
-  # Counter2 = import("Counter2.rb")
-  # AutoCounter = import("AutoCounter.rb")
-  # Signals = import("Signals.rb")
-  # Signals2 = import("Signals2.rb")
-  # Signals3 = import("Signals3.rb")
-  # Signals4 = import("Signals4.rb")
-  # Signals5 = import("Signals5.rb")
+  Counter = import("Counter.haml")
   Haml = import("Haml.haml")
   List = import("List.haml")
   Styles = import("Styles.haml")
 
   PAGES = [
     StartPage,
-    # Counter,
-    # Counter2,
-    # AutoCounter,
-    # Signals,
-    # Signals2,
-    # Signals3,
-    # Signals4,
-    # Signals5,
     List,
     Haml,
     Styles,
@@ -32,8 +17,10 @@
   end
 
 %section
-  %header
-    %h1 My webpage
+  %header(part="rdom-header")
+    %h1
+      My webpage
+    %Counter(initial-count=2)
   %nav
     %menu(part="rdom-menu")
       = PAGES.map do |component|
@@ -51,4 +38,9 @@
     padding: 1em;
     background: #0001;
     border-radius: 2px;
+  }
+  ::part(rdom-header) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }

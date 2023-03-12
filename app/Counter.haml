@@ -1,0 +1,13 @@
+:ruby
+  def initialize(**)
+    @count = signal(0)
+  end
+
+  def mount
+    loop do
+      sleep(1)
+      @count.value += 1
+    end
+  end
+
+%span= @count

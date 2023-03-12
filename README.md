@@ -14,6 +14,19 @@ For a more complete implementation, see
 I had some ideas that I felt like I had to explore,
 and this is the result.
 
+## Getting started
+
+Make sure you have
+[Ruby 3.2](https://www.ruby-lang.org/en/downloads/) and
+[Bundler](https://bundler.io/),
+then run:
+
+    bundle install
+
+To start the server:
+
+    ruby config.ru
+
 ## Server
 
 This thing comes with an HTTP/2 server.
@@ -34,108 +47,120 @@ These are the only lines of HTML you need to mount an app.
 
 ## Transforms
 
-This program reads `app/App.rb` and performs the following transforms:
+You can use `bin/transform` to see the transformed output of a Haml-file.
 
-* Add `frozen_string_literal: true` to the top of the file.
-* Transform `@foo` to `self.state[:foo]`.
-* Transform `@foo = 123` to `self.update { self.state[:foo] = 123 }`.
-* Transform `$foo` to `self.props[:foo]`.
+Example:
 
-Code within [backticks](https://ruby-doc.org/3.2.0/Kernel.html#method-i-60)
-and [heredocs](https://ruby-doc.org/3.2.0/syntax/literals_rdoc.html#label-Here+Document+Literals)
-identified by HTML, will be parsed, and tags will be transformed into Ruby code.
-
-Then it creates a class that inherits from `Component::Base`,
-and calls methods on it asynchronously.
-
-## Getting started
-
-Make sure you have Ruby 3.2 and bundler, then run:
-
-    bundle install
-
-To start the thing, type:
-
-    ruby config.ru
+    bin/transform app/List.haml
 
 ## Limitations
+
+### Only streaming
+
+Apps made with this can only be streamed, the server will never
+attempt to construct the HTML for the initial request.
+If you need to serve HTML in the initial request, have a look at
+[Mayu Live](https://github.com/mayu-live/framework).
 
 ### No resuming
 
 If the connection drops, all state is lost.
+For an attempt at something more reliable, check out
+[Mayu Live](https://github.com/mayu-live/framework).
 
-### Reordering is broken
+### Fragments don't work etc
 
-Currently trying to achieve this:
+All static DOM trees are extracted into custom elements, so if you write:
 
-**input**
 ```haml
-:ruby
-  # setup
-:ruby
-  items = %w[foo bar baz]
-%div
-  %ul
-    = items.map do |item|
-      %li= item
+- items = %w[foo bar baz]
+%ul
+  = items.map do |item|
+    %li= item
 ```
 
-**output**
+Then this code will be generated:
+
 ```ruby
 # frozen_string_literal: true
 class self::Component < VDOM::Component::Base
-  Partial_qeurtua4rb =
-    CustomElement.new(
-      name: "rdom-elem-qeurtua4rb",
-      template: '<div><ul><slot name="slot0"></slot></ul></div>'
-    )
-  Partial_2vaz9fi4yr =
-    CustomElement.new(
-      name: "rdom-elem-2vaz9fi4yr",
-      template: '<li><slot name="slot0"></slot></li>'
-    )
-  # setup
+  RDOM_Partials = [
+    VDOM::CustomElement[
+      :"rdom-elem-app꞉꞉my-component.haml-0",
+      '<ul><slot id="slot0"></slot></ul>'
+    ],
+    VDOM::CustomElement[
+      :"rdom-elem-app꞉꞉my-component.haml-1",
+      '<li><slot id="slot0"></slot></li>'
+    ]
+  ]
   def render
     items = %w[foo bar baz]
     H[
-      Partial_qeurtua4rb,
+      RDOM_Partials[0],
       slots: {
-        slot0:
-          items.map { |item| H[Partial_2vaz9fi4yr, slots: { slot0: item }] }
+        slot0: items.map { |item| H[RDOM_Partials[1], slots: { slot0: item }] }
       }
     ]
   end
 end
 ```
 
-Which should render something like this:
+The browser will give you:
 
 ```html
-<rdom-elem-qeurtua4rb>
-  #shadow-root
-    <div>
-      <ul>
-        <slot name="slot0"></slot>
-      </ul>
-    </div>
-  <rdom-elem-2vaz9fi4yr>
-    #shadow-root
-      <li><slot name="slot0"></slot></li>
+<rdom-elem-my-component.haml-0>
+  #shadow-dom
+    <ul><slot></slot></ul>
+  <rdom-elem-my-component.haml-1>
+    #shadow-dom
+      <li><slot></slot></li>
     #text(foo)
-  </rdom-elem-2vaz9fi4yr>
-  <rdom-elem-2vaz9fi4yr>
-    #shadow-root
-      <li><slot name="slot0"></slot></li>
-    #text(foo)
-  </rdom-elem-2vaz9fi4yr>
-  <rdom-elem-2vaz9fi4yr>
-    #shadow-root
-      <li><slot name="slot0"></slot></li>
+  </rdom-elem-my-component.haml-1>
+  <rdom-elem-my-component.haml-1>
+    #shadow-dom
+      <li><slot></slot></li>
     #text(bar)
-  </rdom-elem-2vaz9fi4yr>
-</rdom-elem-qeurtua4rb>
+  </rdom-elem-my-component.haml-1>
+  <rdom-elem-my-component.haml-1>
+    #shadow-dom
+      <li><slot></slot></li>
+    #text(baz)
+  </rdom-elem-my-component.haml-1>
+</rdom-elem-my-component.haml-0>
 ```
 
-And then all children with that slot would be set using [slot.assign()](https://developer.mozilla.org/en-US/docs/Web/API/HTMLSlotElement/assign).
+Each slot inside the shadow DOM will have it's
+nodes assigned whenever children are updated.
 
-[Link to prototype](https://flems.io/#0=N4IgtglgJlA2CmIBcBWAnAOgBwGYA0IAxgPYB2AzsQskVbAIYAO58UIBAZhAucgNqhS9MIiQgMACwAuYWO1qkp8RTRABfPIOGjxAK14ESi5VJocArqUJSIZAASEATvHpKAKvDCMGSgBTTZAEo7YAAdUjsHMnIpOyUvH3g7AF47KGJCcxFFDCcXJQBRBGypXwByeO9XeDLA8MjKxIwIUlJ4RwAJNwBZABkUuwDYertnKXNHCMbq8LVwiysbeyh4LjaAYXMY4jAizxNfIRE8QZlYYLCIqIpY6aUBvOqPBOr-M8CAbhHM7d3ik3IGBWa3gvhGkSO8Dw4IcDHI5Ds8AAHkpSFAEV0+nsSiEYZEjG1rKx1vRYLAAEb0QgAa18FzxkTsEA4dl8AEIpBIIIDyBJ6OkAO4AJWIxCk9KujKlcS5gNcUipEgAynzBb5LtLNXYwMQVkg7KEQMRGMpDdDJVrIuRYGKAILwiAAc1IJX1hrA9FI5lJZoZUrUgQwTBNaN8d3guTIqKkuRtbQAcrrQVJHOZ4IE6hb-X6ZdygdzGK5CBICgA3A5tAV2MsHMoE+BEqC1TOauZZuz0B3OpU20qQk4YQekJPkCWW5mszl57nrMiEpRQMeW3NyxghqC+QcYYcrQFcWBKRy+Q5J4LJAB8dh3EcLzkUdjZyVSU9HLeXL4wvP5xGFoqkOalDAAEc00cABPJV4AQaxiCPAADa0xT4SFkgAEmASE1AAXTgt9lzsIMu1ITchxHPDpTURFYBYXF2ylD9+SgGtFF6blUXaME6OlOs5wbBcynNfDIjpFJLwYoiezFQ5tAHUjd0CQShOAOwyEIeB9RTNM7DbfDyOzLixgmKZZQZHTGTMzM22BFp4E2X5sQOEY6y2KQdgAWlgNiBJGOCAB5zFgOwYjAhBkkNTyYjc4KEDcqQwJNfUVkICAPVgL4QHPXzENiFDDWLbgoDvQ1MoAemy0qAvPODwkzayNhcnYHMUTjImc343IgeJvKuPzPMy7Kr20MKiC5WBCtNDLfLK3tSr66rSEzcIjBiOwItiVJ0kyEpcmcaomtKNrXLADyvNqjIshMDByV1MCgzXZQNzWxarGiWJ8rGu8Bj4Q16DNA0QHJP68qBkAOFFEHKUcCH6AAL0NLCMA9RhjxiRwz0vDVRngcZJlZGFNouxQGR2-J4H28ofiOjqur0gjO3IJ1SEkg73vG0gBLSc7tsedxkSkRMVl8VGMxGSznpYKQAEljEcUtSWPdHaMiNbCIZ7tewp0a2Y5rdWbvN89eUDBnHLRwWDpWYTgARgABjtwJ5BYaClgoGgACYbaQG23JwHAkAAdnUTQQEhGhcnheQjGjVRsLUIA)
+This is good for several reasons:
+
+* Markup is only transferred to the browser once and can be reused.
+* Diffing becomes easier because we don't have care about order.
+  [HTMLSlotElement.assign()](https://developer.mozilla.org/en-US/docs/Web/API/HTMLSlotElement/assign)
+  updates the order of children in 1 call.
+  Most VDOM libraries use the use the famous 2-way-diffing algorithm,
+  which is difficult to get right.
+
+However, it makes some things trickier:
+
+* Custom elements are created during compile time and hence not visible
+  to the developer, which can cause wrapping issues with `flex` and `grid`
+  which work on the immediate child, which would be the generated custom
+  element, and not the element that the developer expected, which would
+  be the first child of the custom element.
+* Stylesheets are scoped to each custom element, so class names don't work
+  even inside the same component.
+  Class names are very convenient and everyone knows how they work.
+  [Shadow parts](https://developer.mozilla.org/en-US/docs/Web/CSS/::part)
+  can be exported so that stylesheets in parent shadow DOMs can access them,
+  but they don't work 100% the same which might be confusing.
+  Trying to think of a way to transform class names into parts, or if class
+  names would work fine, as long as the same stylesheet is inserted into the
+  shadow DOMs of each custom element in that component.
+  Nesting wouldn't work usually because it would be across components.
+
+I think it would be possible to generate fewer custom elements,
+because [some elements allow you to attach a shadow DOM](https://developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow#elements_you_can_attach_a_shadow_to).
+In other cases, we could detect if the outer element is one of those,
+and create a custom element based on that element.
