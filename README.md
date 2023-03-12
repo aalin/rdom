@@ -112,20 +112,39 @@ The browser will give you:
 <rdom-elem-my-component.haml-0>
   #shadow-dom
     <ul><slot></slot></ul>
+    <li>
+      <slot id="slot0">
+        <rdom-elem-my-component.haml-1> ↴
+        <rdom-elem-my-component.haml-1> ↴
+        <rdom-elem-my-component.haml-1> ↴
+      </slot>
+    </li>
   <rdom-elem-my-component.haml-1>
     #shadow-dom
-      <li><slot></slot></li>
-    #text(foo)
+      <li>
+        <slot id="slot0">
+          <#text> ↴
+        </slot>
+      </li>
+    foo
   </rdom-elem-my-component.haml-1>
   <rdom-elem-my-component.haml-1>
     #shadow-dom
-      <li><slot></slot></li>
-    #text(bar)
+      <li>
+        <slot id="slot0">
+          <#text> ↴
+        </slot>
+      </li>
+    bar
   </rdom-elem-my-component.haml-1>
   <rdom-elem-my-component.haml-1>
     #shadow-dom
-      <li><slot></slot></li>
-    #text(baz)
+      <li>
+        <slot id="slot0">
+          <#text> ↴
+        </slot>
+      </li>
+    baz
   </rdom-elem-my-component.haml-1>
 </rdom-elem-my-component.haml-0>
 ```
