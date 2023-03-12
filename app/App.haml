@@ -35,9 +35,20 @@
   %header
     %h1 My webpage
   %nav
-    %menu
+    %menu(part="rdom-menu")
       = PAGES.map do |component|
         %li
           %button{onclick: -> { @page = component }}= component.title
   %main
     = H[@page]
+
+:css
+  ::part(rdom-menu) {
+    display: flex;
+    gap: 1em;
+    flex-wrap: wrap;
+    list-style-type: none;
+    padding: 1em;
+    background: #0001;
+    border-radius: 2px;
+  }
