@@ -28,6 +28,11 @@
           %button{onclick: -> { @page = component }}= component.title
   %main
     = H[@page]
+  %hr
+  %footer
+    %p
+      %a(href="https://github.com/aalin/rdom" target="_blank")
+        github.com/aalin/rdom
 
 :css
   ::part(rdom-menu) {
