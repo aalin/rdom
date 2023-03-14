@@ -9,7 +9,7 @@ require_relative "patches"
 require_relative "descriptor"
 require_relative "custom_element"
 require_relative "text_diff"
-  require "pry"
+require "pry"
 
 module VDOM
   module Nodes
@@ -66,9 +66,12 @@ module VDOM
         @task&.stop
 
       def dom_id =
-        @dom_id || @parent&.dom_id
+        @dom_id || parent.dom_id
 
       protected
+
+      def parent =
+        @parent || raise("There is no parent")
 
       def receive(&)
         if block_given?
@@ -82,26 +85,26 @@ module VDOM
         if klass === self
           self
         else
-          @parent&.closest(klass)
+          parent.closest(klass)
         end
       end
 
       def async(&) =
         (@task || @parent || Async::Task.current).async(&)
       def hierarchy =
-        [*@parent&.hierarchy, self]
+        [*parent.hierarchy, self]
       def running? =
         !@task&.stopped?
       def batch(&) =
-        @parent&.batch(&)
+        parent.batch(&)
       def patch(patch) =
-        @parent&.patch(patch)
+        parent.patch(patch)
       def get_slot(name) =
-        @parent.get_slot(name)
+        parent.get_slot(name)
       def callbacks =
-        @parent.callbacks
+        parent.callbacks
       def mount_dom_node(id, &) =
-        @parent&.mount_dom_node(id, &)
+        parent.mount_dom_node(id, &)
     end
 
     class VNode < Base
@@ -152,16 +155,19 @@ module VDOM
           closest(VRoot)&.register_stylesheet(stylesheet)
         end
 
-        instance = descriptor.type.new(**descriptor.props)
-
+        instance = descriptor.type.allocate
+        # Define @props before calling initialize,
+        # so we can use self.props inside initialize.
         instance.instance_variable_set(:@props, descriptor.props)
+        instance.send(:initialize, **descriptor.props)
 
-        vcomponent = self
-        @slots = group_descriptors_by_slots(descriptor.children)
-
-        instance.define_singleton_method(:rerender!) do
-          vcomponent.resume(:rerender!)
+        yield_self do |vcomponent|
+          instance.define_singleton_method(:rerender!) do
+            vcomponent.resume(:rerender!)
+          end
         end
+
+        @slots = group_descriptors_by_slots(descriptor.children)
 
         VAny.run(instance.render) do |vnode|
           async { instance.mount }
@@ -190,7 +196,7 @@ module VDOM
         end
       end
     end
-    #
+
     # class VFragment < VNode
     #   def run(descriptors)
     #     p(descriptors:)
@@ -231,7 +237,7 @@ module VDOM
               slot.resume(descriptor)
               [name, slot]
             else
-              [name, VSlotted.start(@parent.dom_id, name, descriptor)]
+              [name, VSlotted.start(parent.dom_id, name, descriptor)]
             end
           end.to_h
         ensure
@@ -256,7 +262,7 @@ module VDOM
               ref.resume(props)
               [name, ref]
             else
-              [name, VProps.start(@parent.dom_id, name, props)]
+              [name, VProps.start(parent.dom_id, name, props)]
             end
           end.to_h
         ensure
@@ -285,7 +291,7 @@ module VDOM
         patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
         patch(Patches::SetAttribute[nil, id, "exportparts", "rdom-*"])
 
-        @parent.mount_dom_node(id) do
+        mount_dom_node(id) do
           yield
         end
       ensure
@@ -317,14 +323,11 @@ module VDOM
         end
       end
 
-      class VSlottedChild < Base
+      class VChild < Base
         attr_accessor :index
         attr_accessor :hash
 
-        def run(parent_id, descriptor)
-          @parent_id = parent_id
-          # @hash = Descriptor.get_hash(descriptor.hash)
-
+        def run(descriptor)
           descriptor = receive
 
           VAny.run(descriptor) do |vnode|
@@ -343,7 +346,7 @@ module VDOM
             raise "There is already a DOM node mounted here"
           end
 
-          @parent.mount_dom_node(@dom_id = id) do
+          super(@dom_id = id) do
             yield
           ensure
             @dom_id = nil
@@ -399,10 +402,10 @@ module VDOM
               found.index = index
               found
             else
-              child = VSlottedChild.new
+              child = VChild.new
               child.hash = Descriptor.get_hash(descriptor)
               child.index = index
-              child.start(@dom_id, descriptor)
+              child.start(descriptor)
               child
             end
           end
@@ -658,8 +661,7 @@ module VDOM
         @barrier = Async::Barrier.new(parent: task)
         @patches = Async::Queue.new
         @callbacks = {}
-        @custom_elements = Set.new
-        @stylesheets = Set.new
+        @sent_assets = Set.new
         super()
       end
 
@@ -669,14 +671,14 @@ module VDOM
         patch(Patches::DefineCustomElement[
           custom_element.name,
           custom_element.template,
-        ]) if @custom_elements.add?(custom_element)
+        ]) if @sent_assets.add?(custom_element)
       end
 
       def register_stylesheet(stylesheet)
         patch(Patches::DefineStyleSheet[
           stylesheet.filename,
           stylesheet.content,
-        ]) if @stylesheets.add?(stylesheet)
+        ]) if @sent_assets.add?(stylesheet)
       end
 
       def patch(patch) =
@@ -697,8 +699,16 @@ module VDOM
         if handler.arity.zero?
           handler.call
         else
-          handler.call(**payload)
+          handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
         end
+      end
+
+      def extract_kwargs(parameters)
+        parameters.map do |param|
+          if param in [:key | :keyreq, name]
+            name
+          end
+        end.compact
       end
 
       RootElement = CustomElement[

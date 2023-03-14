@@ -5,7 +5,7 @@
 
   percent = computed { "#{size.value}%" }
 
-  oninput = ->(target:, **) do
+  oninput = ->(target:) do
     size.value = target[:value].to_i
   end
 
