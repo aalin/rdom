@@ -65,6 +65,9 @@ module VDOM
       def stop =
         @task&.stop
 
+      def dom_id =
+        @dom_id || @parent&.dom_id
+
       protected
 
       def receive(&)
@@ -186,7 +189,6 @@ module VDOM
           end
         end
       end
-
     end
     #
     # class VFragment < VNode
@@ -210,6 +212,227 @@ module VDOM
     #     patch(Patches::RemoveNode[id])
     #   end
     # end
+
+    class VCustomElement < VNode
+      class VChildSlots < VNode
+        def run(slots)
+          children = diff_slots({}, slots)
+
+          receive do |slots|
+            children = diff_slots(children, slots)
+          end
+        ensure
+          diff_slots(children, {})
+        end
+
+        def diff_slots(slots, new_slots)
+          new_slots.map do |name, descriptor|
+            if slot = slots.delete(name)
+              slot.resume(descriptor)
+              [name, slot]
+            else
+              [name, VSlotted.start(@parent.dom_id, name, descriptor)]
+            end
+          end.to_h
+        ensure
+          slots.values.flatten.each(&:stop)
+        end
+      end
+
+      class VPropRefs < VNode
+        def run(refs)
+          refs = diff_refs({}, refs)
+
+          receive do |new_refs|
+            refs = diff_refs(refs, new_refs)
+          end
+        ensure
+          diff_refs(refs, {})
+        end
+
+        def diff_refs(refs, new_refs)
+          new_refs.map do |name, props|
+            if ref = refs.delete(name)
+              ref.resume(props)
+              [name, ref]
+            else
+              [name, VProps.start(@parent.dom_id, name, props)]
+            end
+          end.to_h
+        ensure
+          refs.values.flatten.each(&:stop)
+        end
+      end
+
+      def run(descriptor)
+        custom_element = descriptor.type
+        closest(VRoot)&.register_custom_element(custom_element)
+
+        with_element(custom_element.name) do
+          VChildSlots.run(descriptor.props[:slots] || {}) do |vchild_slots|
+            VPropRefs.run(descriptor.props[:refs] || {}) do |vprop_refs|
+              receive do |descriptor|
+                vprop_refs.resume(descriptor.props[:refs] || {})
+                vchild_slots.resume(descriptor.props[:slots] || {})
+              end
+            end
+          end
+        end
+      end
+
+      def with_element(type, id: generate_id)
+        @dom_id = id
+        patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
+        patch(Patches::SetAttribute[nil, id, "exportparts", "rdom-*"])
+
+        @parent.mount_dom_node(id) do
+          yield
+        end
+      ensure
+        patch(Patches::RemoveNode[id])
+      end
+    end
+
+    class VSlotted < VNode
+      class UpdateOrder < VNode
+        def run(parent_id, slot_name, children)
+          order = []
+
+          receive do |children|
+            new_order = calculate_order(children)
+            next if new_order == order
+            order = new_order
+
+            patch(Patches::AssignSlot[parent_id, slot_name, order])
+          end
+        end
+
+        def calculate_order(children)
+          children
+            .values
+            .flatten
+            .sort_by(&:index)
+            .map(&:dom_id)
+            .compact
+        end
+      end
+
+      class VSlottedChild < Base
+        attr_accessor :index
+        attr_accessor :hash
+
+        def run(parent_id, descriptor)
+          @parent_id = parent_id
+          # @hash = Descriptor.get_hash(descriptor.hash)
+
+          descriptor = receive
+
+          VAny.run(descriptor) do |vnode|
+            receive do |descriptor|
+              vnode.resume(descriptor)
+            end
+          end
+        end
+
+        def insert!
+          patch(Patches::InsertBefore[child.parent_id, @dom_id, nil])
+        end
+
+        def mount_dom_node(id)
+          if @dom_id
+            raise "There is already a DOM node mounted here"
+          end
+
+          @parent.mount_dom_node(@dom_id = id) do
+            yield
+          ensure
+            @dom_id = nil
+          end
+        end
+      end
+
+      def reorder! =
+        @reorder&.signal(true)
+
+      def run(parent_id, name, descriptors)
+        @reorder = Async::Condition.new
+        @parent_id = parent_id
+        @name = name
+        @semaphore = Async::Semaphore.new(1)
+
+        children = update_children({}, descriptors)
+
+        UpdateOrder.run(parent_id, name, children) do |update_order|
+          async do
+            loop do
+              @semaphore.acquire do
+                update_order.resume(children)
+              end
+
+              @reorder.wait
+            end
+          end
+
+          receive do |descriptors|
+            @semaphore.acquire do
+              children = update_children(children, descriptors)
+              reorder!
+            end
+          end
+        ensure
+          children.values.flatten.each(&:stop)
+          children.clear
+        end
+      end
+
+      def update_children(children, descriptors)
+        diff_children(
+          children,
+          normalize_descriptors(descriptors),
+        )
+      end
+
+      def diff_children(children, descriptors)
+        descriptors
+          .map.with_index do |descriptor, index|
+            if found = children[Descriptor.get_hash(descriptor)]&.shift
+              found.index = index
+              found
+            else
+              child = VSlottedChild.new
+              child.hash = Descriptor.get_hash(descriptor)
+              child.index = index
+              child.start(@dom_id, descriptor)
+              child
+            end
+          end
+          .zip(descriptors)
+          .map do |child, descriptor|
+            child.resume(descriptor)
+            child
+          end
+          .tap do
+            if children
+              children.values.flatten.each(&:stop)
+            end
+          end
+          .group_by(&:hash)
+      end
+
+      def normalize_descriptors(descriptors)
+        Descriptor.normalize_children(descriptors)
+      end
+
+      def mount_dom_node(id)
+        puts "Mounting #{id} into #{@parent_id}"
+        patch(Patches::InsertBefore[@parent_id, id, nil])
+        reorder!
+        yield
+      ensure
+        patch(Patches::RemoveChild[@parent_id, id])
+        reorder!
+      end
+    end
 
     class VProps < VNode
       class VAttr < Base
@@ -347,213 +570,6 @@ module VDOM
       end
     end
 
-    class VSlotted < VNode
-      class UpdateOrder < VNode
-        def run(parent_id, slot_name, children)
-          order = []
-
-          receive do |children|
-            new_order = calculate_order(children)
-            next if new_order == order
-            order = new_order
-
-            patch(Patches::AssignSlot[parent_id, slot_name, order])
-          end
-        end
-
-        def calculate_order(children)
-          children
-            .values
-            .flatten
-            .sort_by(&:index)
-            .map(&:dom_id)
-            .compact
-        end
-      end
-
-      class VSlottedChild < Base
-        attr_accessor :index
-        attr_accessor :hash
-        attr_reader :dom_id
-
-        def run(parent_id, descriptor)
-          @parent_id = parent_id
-          # @hash = Descriptor.get_hash(descriptor.hash)
-
-          descriptor = receive
-
-          VAny.run(descriptor) do |vnode|
-            receive do |descriptor|
-              vnode.resume(descriptor)
-            end
-          end
-        end
-
-        def insert!
-          patch(Patches::InsertBefore[child.parent_id, @dom_id, nil])
-        end
-
-        def mount_dom_node(id)
-          if @dom_id
-            raise "There is already a DOM node mounted here"
-          end
-
-          @parent.mount_dom_node(@dom_id = id) do
-            yield
-          ensure
-            @dom_id = nil
-          end
-        end
-      end
-
-      def reorder!
-        if cond = @reorder
-          puts "\e[3;33mSignalling!!\e[0m"
-          cond.signal(true)
-        else
-          puts "\e[3;31mNo condition!!\e[0m"
-        end
-      end
-
-      def run(parent_id, name, descriptors)
-        @reorder = Async::Condition.new
-        @parent_id = parent_id
-        @name = name
-        @semaphore = Async::Semaphore.new(1)
-
-        children = update_children({}, descriptors)
-
-        UpdateOrder.run(parent_id, name, children) do |update_order|
-          async do
-            loop do
-              @semaphore.acquire do
-                update_order.resume(children)
-              end
-
-              @reorder.wait
-            end
-          end
-
-          receive do |descriptors|
-            @semaphore.acquire do
-              children = update_children(children, descriptors)
-              reorder!
-            end
-          end
-        ensure
-          children.values.flatten.each(&:stop)
-          children.clear
-        end
-      end
-
-      def update_children(children, descriptors)
-        diff_children(
-          children,
-          normalize_descriptors(descriptors),
-        )
-      end
-
-      def diff_children(children, descriptors)
-        descriptors
-          .map.with_index do |descriptor, index|
-            if found = children[Descriptor.get_hash(descriptor)]&.shift
-              found.index = index
-              found
-            else
-              child = VSlottedChild.new
-              child.hash = Descriptor.get_hash(descriptor)
-              child.index = index
-              child.start(@dom_id, descriptor)
-              child
-            end
-          end
-          .zip(descriptors)
-          .map do |child, descriptor|
-            child.resume(descriptor)
-            child
-          end
-          .tap do
-            if children
-              children.values.flatten.each(&:stop)
-            end
-          end
-          .group_by(&:hash)
-      end
-
-      def normalize_descriptors(descriptors)
-        Descriptor.normalize_children(descriptors)
-      end
-
-      def mount_dom_node(id)
-        puts "Mounting #{id} into #{@parent_id}"
-        patch(Patches::InsertBefore[@parent_id, id, nil])
-        reorder!
-        yield
-      ensure
-        patch(Patches::RemoveChild[@parent_id, id])
-        reorder!
-      end
-    end
-
-    class VCustomElement < VNode
-      def run(descriptor)
-        custom_element = descriptor.type
-        closest(VRoot)&.register_custom_element(custom_element)
-
-        with_element(custom_element.name) do
-          slots = diff_slots({}, descriptor.props[:slots] || {})
-          refs = diff_refs({}, descriptor.props[:refs] || {})
-
-          receive do |descriptor|
-            slots = diff_slots(slots, descriptor.props[:slots] || {})
-            refs = diff_refs(refs, descriptor.props[:refs] || {})
-          end
-        ensure
-          slots = diff_slots(slots, {})
-          refs = diff_refs(refs, {})
-        end
-      end
-
-      def diff_slots(slots, new_slots)
-        result =
-          new_slots.map do |name, descriptor|
-            if slot = slots.delete(name)
-              slot.resume(descriptor)
-              [name, slot]
-            else
-              [name, VSlotted.start(@dom_id, name, descriptor)]
-            end
-          end.to_h
-        slots.values.flatten.each(&:stop)
-        result
-      end
-
-      def diff_refs(refs, new_refs)
-        result =
-          new_refs.map do |name, props|
-            if ref = refs.delete(name)
-              ref.resume(props)
-              [name, ref]
-            else
-              [name, VProps.start(@dom_id, name, props)]
-            end
-          end.to_h
-        refs.values.flatten.each(&:stop)
-        result
-      end
-
-      def with_element(type, id: generate_id)
-        @dom_id = id
-        patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
-        patch(Patches::SetAttribute[nil, id, "exportparts", "rdom-*"])
-
-        @parent.mount_dom_node(id) do
-          yield
-        end
-      ensure
-        patch(Patches::RemoveNode[id])
-      end
-    end
 
     class VSlot < Base
       def run(descriptor)
