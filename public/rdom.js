@@ -241,8 +241,8 @@ const PatchFunctions = {
     }
     this.nodes.delete(id);
   },
-  DefineCustomElement(name, template) {
-    defineCustomElement(name, template)
+  DefineCustomElement(name, template, cssPath) {
+    defineCustomElement(name, template, cssPath)
   },
   CreateChildren(parentId, id) {
     const parent = this.nodes.get(parentId);
@@ -281,15 +281,6 @@ const PatchFunctions = {
     console.log(slot, nodes.map((slot) => slot))
     slot.assign.apply(slot, nodes)
     console.log(slot)
-  },
-  DefineStyleSheet(name, content) {
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(content);
-
-    this.root.adoptedStyleSheets = [
-      ...this.root.adoptedStyleSheets,
-      sheet,
-    ];
   },
   AssignSlot(id, name, ids) {
     const node = this.nodes.get(id);
@@ -384,14 +375,20 @@ const PatchFunctions = {
   },
 };
 
-function createTemplate(html) {
+function createTemplate(html, css) {
   const template = document.createElement("template");
-  template.innerHTML = html;
+  template.innerHTML = importCSS(css) + html
   return template
 }
 
-function defineCustomElement(name, html) {
-  const template = createTemplate(html)
+function importCSS(path) {
+  if (!path) return ""
+  path = `/.rdom/${path}`
+  return `<style>@import ${JSON.stringify(path)}</style>`
+}
+
+function defineCustomElement(name, html, css) {
+  const template = createTemplate(html, css)
 
   customElements.define(
     name,

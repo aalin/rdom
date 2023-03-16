@@ -6,6 +6,7 @@ require_relative "descriptor"
 require_relative "custom_element"
 require_relative "reactively"
 require_relative "css_units"
+require_relative "assets"
 
 module VDOM
   module Component
@@ -15,7 +16,10 @@ module VDOM
       include Reactively::Helpers
 
       def self.import(filename)
-        Component.load_file(filename, File.dirname(caller.first.split(":", 2).first))
+        Component.load_file(
+          filename,
+          File.dirname(caller.first.split(":", 2).first)
+        )
       end
 
       def self.title = name[/[^:]+\z/]
@@ -49,9 +53,8 @@ module VDOM
     class ComponentModule < Module
       using CSSUnits::Refinements
 
-      def initialize(code, path)
+      def initialize(code, path) =
         instance_eval(code, path, 1)
-      end
     end
 
     def self.load_file(filename, source_path = nil)
@@ -82,8 +85,19 @@ module VDOM
           name = File.basename(path, ".*").freeze
           component.define_singleton_method(:title) { name }
           component.const_set(:COMPONENT_META, { name:, path: }.freeze)
+
+          if stylesheet = component.const_get(:RDOM_Stylesheet)
+            Assets.instance.store(stylesheet)
+          end
+
           component
         end
+    end
+
+    def self.get_stylesheet(component)
+      if component.const_defined?(:RDOM_Stylesheet)
+        component.const_get(:RDOM_Stylesheet)
+      end
     end
   end
 end

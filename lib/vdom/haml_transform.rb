@@ -112,7 +112,10 @@ module VDOM
     end
 
     def define_stylesheets(styles)
-      return if styles.empty?
+      return Assign(
+        VarField(Const(STYLES_CONST_NAME)),
+        VarRef(Kw("nil"))
+      ) if styles.empty?
 
       content =
         styles
@@ -152,8 +155,6 @@ module VDOM
     end
 
     def define_partials(custom_elements)
-      return if custom_elements.empty?
-
       Assign(
         VarField(Const(PARTIALS_CONST_NAME)),
         ArrayLiteral(
@@ -176,6 +177,7 @@ module VDOM
         Args([
           DynaSymbol([TStringContent(custom_element.name)], "'"),
           StringLiteral([TStringContent(custom_element.root.to_s)], "'"),
+          VarRef(Const(STYLES_CONST_NAME)),
         ])
       )
     end

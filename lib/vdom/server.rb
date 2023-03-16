@@ -5,6 +5,16 @@ require "async/queue"
 require "async/http/endpoint"
 require "async/http/protocol/response"
 require "async/http/server"
+require_relative "assets"
+
+class Async::HTTP::Protocol::HTTP2::Request
+  def deconstruct_keys(keys)
+    keys
+      .filter { instance_variable_defined?("@#{_1}") }
+      .map { [_1, instance_variable_get("@#{_1}")] }
+      .to_h
+  end
+end
 
 module VDOM
   class Server
@@ -104,6 +114,9 @@ module VDOM
         ].join(", ").freeze
       }.freeze
 
+      CACHE_MAX_AGE = 60 * 60 * 24 * 7
+      ASSET_CACHE_CONTROL = "public, max-age=#{CACHE_MAX_AGE}, immutable"
+
       def initialize(component:, public_path:)
         @component = component
         @public_path = public_path
@@ -129,6 +142,8 @@ module VDOM
           handle_rdom_get(request)
         in "/.rdom" if request.method == "POST"
           handle_rdom_post(request)
+        in %r{\A/\.rdom/(.+)\z} if request.method == "GET"
+          handle_rdom_asset(request)
         else
           handle_404(request)
         end
@@ -145,7 +160,23 @@ module VDOM
         Protocol::HTTP::Response[
           404,
           { "content-type" => "text/plain; charset-utf-8" },
-          ["404 for #{request.path}"]
+          ["File not found at #{request.path}"]
+        ]
+      end
+
+      def handle_rdom_asset(request)
+        asset =
+          Assets.instance.fetch(File.basename(request.path)) do
+            return handle_404(request)
+          end
+
+        Protocol::HTTP::Response[
+          200,
+          {
+            "content-type" => asset.content_type,
+            "cache-control" => ASSET_CACHE_CONTROL,
+          },
+          [asset.content]
         ]
       end
 
@@ -228,7 +259,6 @@ module VDOM
           end
         end
       end
-
 
       def origin_header(request) =
         { "access-control-allow-origin" => request.headers["origin"] }

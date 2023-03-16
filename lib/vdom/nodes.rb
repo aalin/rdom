@@ -65,8 +65,8 @@ module VDOM
       def stop =
         @task&.stop
 
-      def dom_id =
-        @dom_id || parent.dom_id
+      def dom_id(traverse = false) =
+        @dom_id || (traverse && parent.dom_id)
 
       protected
 
@@ -150,11 +150,6 @@ module VDOM
       end
 
       def run(descriptor)
-        if descriptor.type.const_defined?(:RDOM_Stylesheet)
-          stylesheet = descriptor.type.const_get(:RDOM_Stylesheet)
-          closest(VRoot)&.register_stylesheet(stylesheet)
-        end
-
         instance = descriptor.type.allocate
         # Define @props before calling initialize,
         # so we can use self.props inside initialize.
@@ -296,6 +291,7 @@ module VDOM
         end
       ensure
         patch(Patches::RemoveNode[id])
+        @dom_id = nil
       end
     end
 
@@ -337,17 +333,14 @@ module VDOM
           end
         end
 
-        def insert!
-          patch(Patches::InsertBefore[child.parent_id, @dom_id, nil])
-        end
-
-        def mount_dom_node(id)
+        def mount_dom_node(id, &)
           if @dom_id
-            raise "There is already a DOM node mounted here"
+            raise "Attempted to mount #{id} into #{self.class.name} already has mounted #{@dom_id}"
           end
 
-          super(@dom_id = id) do
-            yield
+          begin
+            @dom_id = id
+            super(id, &)
           ensure
             @dom_id = nil
           end
@@ -671,14 +664,8 @@ module VDOM
         patch(Patches::DefineCustomElement[
           custom_element.name,
           custom_element.template,
+          custom_element.stylesheet&.filename,
         ]) if @sent_assets.add?(custom_element)
-      end
-
-      def register_stylesheet(stylesheet)
-        patch(Patches::DefineStyleSheet[
-          stylesheet.filename,
-          stylesheet.content,
-        ]) if @sent_assets.add?(stylesheet)
       end
 
       def patch(patch) =
@@ -713,7 +700,8 @@ module VDOM
 
       RootElement = CustomElement[
         "rdom-root",
-        '<slot id="children"></slot>'
+        '<slot id="children"></slot>',
+        nil
       ]
 
       def run(children = nil)
