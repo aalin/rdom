@@ -17,15 +17,17 @@
   end
 
 %section
-  %header(part="rdom-header")
+  %header
     %h1
       My webpage
     %Counter(initial-count=2)
   %nav
-    %menu(part="rdom-menu")
+    %menu
       = PAGES.map do |component|
+        - aria_current = @page == component ? "page" : false
         %li
-          %button{onclick: -> { @page = component }}= component.title
+          %button{aria_current:, onclick: -> { @page = component }}
+            = component.title
   %main
     = H[@page]
   %hr
@@ -35,7 +37,7 @@
         github.com/aalin/rdom
 
 :css
-  ::part(rdom-menu) {
+  menu {
     display: flex;
     gap: 1em;
     flex-wrap: wrap;
@@ -44,8 +46,23 @@
     background: #0001;
     border-radius: 2px;
   }
-  ::part(rdom-header) {
+  header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  button {
+    border: 0;
+    border-radius: 3px;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+  }
+  button:hover {
+    text-decoration: underline;
+  }
+  button[aria-current]:not([aria-current=false]) {
+    font-weight: bold;
   }

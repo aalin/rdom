@@ -284,7 +284,6 @@ module VDOM
       def with_element(type, id: generate_id)
         @dom_id = id
         patch(Patches::CreateElement[id, type.to_s.tr("_", "-")])
-        patch(Patches::SetAttribute[nil, id, "exportparts", "rdom-*"])
 
         mount_dom_node(id) do
           yield

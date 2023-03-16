@@ -39,9 +39,8 @@ module VDOM
         .map { or_string(_1) }
         .compact
 
-    def self.props(*args)
-      args.reduce({}, &:merge)
-    end
+    def self.merge_props(*props) =
+      props.reduce({}, &:merge)
 
     def self.or_string(descriptor)
       case descriptor

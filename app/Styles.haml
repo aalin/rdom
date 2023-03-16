@@ -17,17 +17,30 @@
   %fieldset
     %legend Play with image sizes
     %p
-      %img(src="/favicon.ico" part="rdom-image")
+      %img(src="/favicon.ico")
   = computed do
     %ul
       = items.value.map do |item|
         %li[item]= item
 
 :css
-  ::part(rdom-image) {
+  img {
     border: 15px solid #f0f;
   }
 
-  html {
-    color: #f0f;
+  ul {
+    list-style-type: none;
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0;
+    margin: 1em;
+    gap: 1em;
+  }
+
+  li {
+    flex: 1 0 33%;
+    border-radius: 3px;
+    background: #0003;
+    margin: 0;
+    padding: .5em 1em;
   }

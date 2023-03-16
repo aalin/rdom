@@ -33,22 +33,22 @@
 
 %article
   %p This page exists to demonstrate reordering.
-  %div(part="rdom-flex")
+  .flex
     %fieldset
       %legend Add
-      %div(part="rdom-flex")
+      .buttons
         %input(type="text" oninput=oninput autocomplete="off" value=input)
         %button(onclick=prepend) Prepend
         %button(onclick=append) Append
     %fieldset
       %legend Actions
-      %div(part="rdom-flex")
+      .buttons
         %button(onclick=sort) Sort
         %button(onclick=reverse) Reverse
         %button(onclick=shuffle) Shuffle
         %button(onclick=clear) Clear
-  %div(part="rdom-flex")
-    %div(part="rdom-list")
+  .flex
+    .list
       = computed do
         %ul
           = items.value.map do |item|
@@ -59,12 +59,21 @@
         %pre= items.value.map(&:inspect).join("\n")
 
 :css
-  ::part(rdom-flex) {
+  .flex {
     display: flex;
     flex-wrap: wrap;
     gap: 1em;
   }
 
-  ::part(rdom-list) {
-    flex: 0 0 10em;
+  .buttons {
+    display: flex;
+    gap: 1em;
+  }
+
+  .list {
+    min-width: 5em;
+  }
+
+  fieldset {
+    flex: 1 1;
   }

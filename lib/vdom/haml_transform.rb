@@ -372,8 +372,9 @@ module VDOM
             build_tag(custom_element, child)
           end
         in { type: :plain }
-          # StringLiteral([TStringContent(child.value[:text])], "'")
           child.value[:text]
+        in { type: :silent_script }
+          parse_ruby(child.value[:text], fix: false)
         in { type: :script }
           create_slot(
             custom_element,
@@ -387,7 +388,7 @@ module VDOM
       CallNode(
         VarRef(Const("H")),
         Period("."),
-        Ident("props"),
+        Ident("merge_props"),
         ArgParen(
           Args(
             props.map do |prop|
