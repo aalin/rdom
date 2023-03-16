@@ -59,6 +59,7 @@ module VDOM
     PARTIALS_CONST_NAME = "RDOM_Partials"
     STYLES_CONST_NAME = "RDOM_Stylesheet"
     CLASS_SEPARATOR = '꞉꞉' # U+A789
+    CUSTOM_ELEMENT_NAME_PREFIX = "rdom-elem-"
 
     include SyntaxTree::DSL
 
@@ -270,7 +271,7 @@ module VDOM
         .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1-\2')
         .tr("_", "-")
         .downcase
-        .prepend("rdom-elem-")
+        .prepend(CUSTOM_ELEMENT_NAME_PREFIX)
     end
 
     def build_tag(custom_element, node)
@@ -444,8 +445,6 @@ module VDOM
               build_custom_element(tag)
             in { type: :script } => script
               build_script(custom_element, script)
-            in { type: :tag }
-              build_custom_element(_1)
             else
               map_children(custom_element, [_1])
             end
