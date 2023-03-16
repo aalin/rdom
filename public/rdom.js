@@ -186,17 +186,16 @@ class PatchStream extends TransformStream {
 
 const PatchFunctions = {
   CreateRoot() {
-    // this.nodes.set(null, this.root)
     const root = document.createElement('rdom-root');
     this.nodes.set(null, root);
     this.root.appendChild(root);
     console.warn("ROOT", this.root)
   },
   DestroyRoot() {
-    // const root = this.nodes.get(null);
-    // if (!root) return;
-    // this.nodes.delete(null);
-    // root.remove();
+    const root = this.nodes.get(null);
+    if (!root) return;
+    this.nodes.delete(null);
+    root.remove();
   },
   CreateElement(id, type) {
     const CustomElement = customElements.get(type);
@@ -204,20 +203,8 @@ const PatchFunctions = {
   },
   InsertBefore(parentId, id, refId) {
     const parent = this.nodes.get(parentId);
-    //
-    // if (!parent) {
-    //   console.error("Could not find parent with id", parentId)
-    //   console.warn("Could not find parent with id", parentId)
-    //   console.log("Could not find parent with id", parentId)
-    //   alert("Could not find parent with id " + parentId)
-    //   return
-    // }
-
     const child = this.nodes.get(id);
     const ref = refId && this.nodes.get(refId);
-
-    console.info("Inserting", child.textContent, "before", ref?.textContent);
-
     parent.insertBefore(child, ref);
   },
   RemoveChild(parentId, id) {
@@ -239,61 +226,15 @@ const PatchFunctions = {
     }
     this.nodes.delete(id);
   },
-  DefineCustomElement(name, template, cssPath) {
-    defineCustomElement(name, template, cssPath)
-  },
-  CreateChildren(parentId, id) {
-    const parent = this.nodes.get(parentId);
-
-    if (!parent) {
-      throw new Error(`Could not find parent with id`, parentId)
-    }
-
-    const node = document.createElement("rdom-children")
-
-    const shadow = node.attachShadow({
-      mode: "open",
-      slotAssignment: "manual"
-    })
-
-    const slot = document.createElement("slot")
-    slot.setAttribute("id", id)
-
-    shadow.append(slot);
-    parent.append(node);
-
-    this.nodes.set(id, node)
-    this.nodes.set(`${id}-slot`, slot)
-  },
-  RemoveChildren(id) {
-    this.nodes.get(id)?.remove();
-    this.nodes.delete(id)
-    this.nodes.get(`${id}-slot`)?.remove();
-    this.nodes.delete(`${id}-slot`)
-  },
-  ReorderChildren(id, ids) {
-    const node = this.nodes.get(`${id}`);
-    const slot = this.slots.get(`${id}-slot`);
-    if (!slot) return
-    const nodes = ids.map((id) => this.nodes.get(id)).filter(Boolean);
-    console.log(slot, nodes.map((slot) => slot))
-    slot.assign.apply(slot, nodes)
-    console.log(slot)
+  DefineCustomElement(name, template, css) {
+    RDOMElement.define(name, template, css)
   },
   AssignSlot(id, name, ids) {
     const node = this.nodes.get(id);
-    if (!node) return
-    if (!node.shadowRoot) {
-      console.log("No shadow root", node)
-      return
-    }
-    const slot = node.shadowRoot.getElementById(name)
-    if (!slot) {
-      console.log("No slot with id", name)
-      return
-    }
-    const nodes = ids.map((id) => this.nodes.get(id)).filter(Boolean);
-    slot.assign(...nodes);
+    node?.assignSlot(
+      name,
+      ids.map((id) => this.nodes.get(id)).filter(Boolean)
+    )
   },
   CreateTextNode(id, content) {
     this.nodes.set(id, document.createTextNode(content));
@@ -311,11 +252,9 @@ const PatchFunctions = {
     this.nodes.get(id).deleteData(offset, count);
   },
   SetAttribute(parentId, refId, name, value) {
-    const node =
-      parentId
-      ? this.nodes.get(parentId)?.shadowRoot?.getElementById(refId)
-      : this.nodes.get(refId);
-
+    const parent = this.nodes.get(parentId);
+    if (!parent) return
+    const node = parent.shadowRoot?.getElementById(refId);
     if (!node) return
 
     if (node instanceof HTMLInputElement) {
@@ -335,18 +274,18 @@ const PatchFunctions = {
       }
     }
 
-    if (name === "initial_value") {
+    if (name === "initial-value") {
       name = "value";
     } else {
-      name = name.replaceAll(/_/g, "");
+      name = name.replaceAll("_", "");
     }
 
     node.setAttribute(name, value);
   },
   RemoveAttribute(parentId, refId, name) {
-    const parent = this.nodes.get(parentId)
+    const parent = this.nodes.get(parentId);
     if (!parent) return
-    const node = parent.shadowRoot?.getElementById(refId)
+    const node = parent.shadowRoot?.getElementById(refId);
     node?.removeAttribute(name);
   },
   CreateDocumentFragment(id) {
@@ -392,46 +331,62 @@ const PatchFunctions = {
   },
 };
 
-function createTemplate(html, css) {
-  const template = document.createElement("template");
-  template.innerHTML = importCSS(css) + html
-  return template
-}
+class RDOMElement extends HTMLElement {
+  static template = null;
+  static stylesheet = null;
+  static styles = createCustomElementStyleSheet();
 
-function importCSS(path) {
-  if (!path) return ""
-  path = `/.rdom/${path}`
-  return `<style>@import ${JSON.stringify(path)};</style>`
-}
-
-const customElementStyleSheet = new CSSStyleSheet();
-customElementStyleSheet.replace(":host { display: contents; }")
-
-function defineCustomElement(name, html, css) {
-  const template = createTemplate(html, css)
-
-
-  customElements.define(
-    name,
-    class extends HTMLElement {
-      connectedCallback() {
-        this.attachShadow({
-          mode: "open",
-          slotAssignment: "manual",
-        });
-
-        this.shadowRoot.appendChild(template.content.cloneNode(true));
-        this.shadowRoot.adoptedStyleSheets = [customElementStyleSheet] //, cssModule.default];
-
-        if (css) {
-          (async () => {
-            const mod = await import(`/.rdom/${css}`, {
-              assert: { type: 'css' }
-            })
-            this.shadowRoot.adoptedStyleSheets.push(mod.default)
-          })
-        }
+  static define(name, html, stylesheet) {
+    customElements.define(
+      name,
+      class extends RDOMElement {
+        static template = createTemplate(html)
+        static stylesheet = stylesheet
       }
+    )
+  }
+
+  connectedCallback() {
+    this.attachShadow({
+      mode: "open",
+      slotAssignment: "manual",
+    });
+
+    const { template, stylesheet, styles } = this.constructor;
+
+    this.shadowRoot.appendChild(template.content.cloneNode(true));
+    this.shadowRoot.adoptedStyleSheets = [styles];
+    importAndAdoptStyleSheet(this.shadowRoot, stylesheet)
+  }
+
+  assignSlot(name, nodes) {
+    const slot = this.shadowRoot.getElementById(name)
+    if (!slot) {
+      console.log("No slot with id", name)
+      return
     }
-  )
+    slot.assign(...nodes);
+  }
+}
+
+async function importAndAdoptStyleSheet(shadow, path) {
+  if (!path) return
+
+  const mod = await import(`/.rdom/${path}`, {
+    assert: { type: 'css' }
+  })
+
+  shadow.adoptedStyleSheets.push(mod.default)
+}
+
+function createCustomElementStyleSheet() {
+  const styles = new CSSStyleSheet();
+  styles.replace(":host { display: contents; }")
+  return styles;
+}
+
+function createTemplate(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html
+  return template
 }
