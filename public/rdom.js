@@ -199,10 +199,8 @@ const PatchFunctions = {
     // root.remove();
   },
   CreateElement(id, type) {
-    const elem = new (customElements.get(type))
-    // const elem = document.createElement(type);
-    elem.setAttribute("id", id)
-    this.nodes.set(id, elem)
+    const CustomElement = customElements.get(type);
+    this.nodes.set(id, new CustomElement())
   },
   InsertBefore(parentId, id, refId) {
     const parent = this.nodes.get(parentId);
@@ -320,11 +318,30 @@ const PatchFunctions = {
 
     if (!node) return
 
-    if (name === "value") {
-      node.value = value;
-    } else {
-      node.setAttribute(name, value);
+    if (node instanceof HTMLInputElement) {
+      switch (name) {
+        case "value": {
+          node.value = value;
+          break;
+        }
+        case "checked": {
+          node.checked = true;
+          break;
+        }
+        case "indeterminate": {
+          node.indeterminate = true;
+          break;
+        }
+      }
     }
+
+    if (name === "initial_value") {
+      name = "value";
+    } else {
+      name = name.replaceAll(/_/g, "");
+    }
+
+    node.setAttribute(name, value);
   },
   RemoveAttribute(parentId, refId, name) {
     const parent = this.nodes.get(parentId)
@@ -393,6 +410,7 @@ customElementStyleSheet.replace(":host { display: contents; }")
 function defineCustomElement(name, html, css) {
   const template = createTemplate(html, css)
 
+
   customElements.define(
     name,
     class extends HTMLElement {
@@ -403,7 +421,16 @@ function defineCustomElement(name, html, css) {
         });
 
         this.shadowRoot.appendChild(template.content.cloneNode(true));
-        this.shadowRoot.adoptedStyleSheets = [customElementStyleSheet];
+        this.shadowRoot.adoptedStyleSheets = [customElementStyleSheet] //, cssModule.default];
+
+        if (css) {
+          (async () => {
+            const mod = await import(`/.rdom/${css}`, {
+              assert: { type: 'css' }
+            })
+            this.shadowRoot.adoptedStyleSheets.push(mod.default)
+          })
+        }
       }
     }
   )
