@@ -384,8 +384,11 @@ function createTemplate(html, css) {
 function importCSS(path) {
   if (!path) return ""
   path = `/.rdom/${path}`
-  return `<style>@import ${JSON.stringify(path)}</style>`
+  return `<style>@import ${JSON.stringify(path)};</style>`
 }
+
+const customElementStyleSheet = new CSSStyleSheet();
+customElementStyleSheet.replace(":host { display: contents; }")
 
 function defineCustomElement(name, html, css) {
   const template = createTemplate(html, css)
@@ -400,6 +403,7 @@ function defineCustomElement(name, html, css) {
         });
 
         this.shadowRoot.appendChild(template.content.cloneNode(true));
+        this.shadowRoot.adoptedStyleSheets = [customElementStyleSheet];
       }
     }
   )

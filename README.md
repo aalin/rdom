@@ -161,25 +161,5 @@ This is good for several reasons:
   Most VDOM libraries use the use the famous 2-way-diffing algorithm,
   which is difficult to get right.
 
-However, it makes some things trickier:
-
-* Custom elements are created during compile time and hence not visible
-  to the developer, which can cause wrapping issues with `flex` and `grid`
-  which work on the immediate child, which would be the generated custom
-  element, and not the element that the developer expected, which would
-  be the first child of the custom element.
-* Stylesheets are scoped to each custom element, so class names don't work
-  even inside the same component.
-  Class names are very convenient and everyone knows how they work.
-  [Shadow parts](https://developer.mozilla.org/en-US/docs/Web/CSS/::part)
-  can be exported so that stylesheets in parent shadow DOMs can access them,
-  but they don't work 100% the same which might be confusing.
-  Trying to think of a way to transform class names into parts, or if class
-  names would work fine, as long as the same stylesheet is inserted into the
-  shadow DOMs of each custom element in that component.
-  Nesting wouldn't work usually because it would be across components.
-
-I think it would be possible to generate fewer custom elements,
-because [some elements allow you to attach a shadow DOM](https://developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow#elements_you_can_attach_a_shadow_to).
-In other cases, we could detect if the outer element is one of those,
-and create a custom element based on that element.
+Each custom element has `:host { display: contents; }` to avoid
+interference with flex and grid.
