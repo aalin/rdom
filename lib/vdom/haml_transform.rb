@@ -238,7 +238,7 @@ module VDOM
 
     def build_custom_element(root)
       id = @custom_elements.size
-      name = const_name_to_custom_element_name("#{@filename}-#{id}")
+      name = custom_element_name("#{@filename}-#{id}")
       element = CustomElement.new(name, id:)
       @custom_elements.push(element)
 
@@ -264,7 +264,7 @@ module VDOM
       ARef(VarRef(Const("H")), Args(args))
     end
 
-    def const_name_to_custom_element_name(str)
+    def custom_element_name(str)
       str
         .gsub(/[:\/]+/, CLASS_SEPARATOR)
         .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1-\2')
