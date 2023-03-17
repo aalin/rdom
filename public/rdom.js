@@ -175,6 +175,27 @@ function initCallbackStreamFetchFallback(endpoint, sessionId) {
   });
 }
 
+class RAFQueue {
+  constructor(onFlush) {
+    this.onFlush = onFlush
+    this.queue = []
+    this.raf = null
+  }
+
+  enqueue(msg) {
+    this.queue.push(msg)
+    this.raf ||= requestAnimationFrame(() => this.flush())
+  }
+
+  flush() {
+    this.raf = null
+    const queue = this.queue;
+    if (queue.length === 0) return
+    this.queue = [];
+    this.onFlush(queue)
+  }
+}
+
 class PatchStream extends TransformStream {
   constructor(endpoint, root) {
     super({
@@ -182,23 +203,29 @@ class PatchStream extends TransformStream {
         controller.endpoint = endpoint;
         controller.root = root;
         controller.nodes = new Map();
+
+        controller.rafQueue = new RAFQueue((patches) => {
+          for (const patch of patches) {
+            const [type, ...args] = patch;
+            const patchFn = PatchFunctions[type];
+
+            if (!patchFn) {
+              console.error("Patch not implemented:", type);
+              continue
+            }
+
+            console.debug("Applying", type, args);
+
+            try {
+              patchFn.apply(controller, args);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        });
       },
       transform(patch, controller) {
-        const [type, ...args] = patch;
-        const patchFn = PatchFunctions[type];
-
-        if (patchFn) {
-          console.debug("Applying", type, args);
-
-          try {
-            patchFn.apply(controller, args);
-          } catch (e) {
-            console.error(e);
-          }
-          return;
-        }
-
-        console.error("Patch not implemented:", type);
+        controller.rafQueue.enqueue(patch);
       },
       flush(controller) {},
     })
