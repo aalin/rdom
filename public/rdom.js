@@ -38,6 +38,7 @@ customElements.define(
           .pipeThrough(new TextEncoderStream())
           .pipeTo(output)
       } finally {
+        console.error('🔴 Disconnected!')
         this._setConnectedState(false)
       }
     }
@@ -59,6 +60,8 @@ function getSessionIdHeader(res) {
 }
 
 async function connect(endpoint) {
+  console.info('🟡 Connecting to', endpoint)
+
   const res = await fetch(endpoint, {
     method: "GET",
     mode: "cors",
@@ -78,6 +81,8 @@ async function connect(endpoint) {
     console.error(res);
     throw new Error(`Unexpected content type: ${contentType}`);
   }
+
+  console.info('🟢 Connected to', endpoint)
 
   return res;
 }
