@@ -9,8 +9,21 @@
     </script>
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.7.0/dist/es-module-shims.js"></script>
     <script type="module-shim" src="/rdom.js"></script>
+    <style>
+      body {
+        overflow-y: scroll;
+      }
+
+      rdom-embed {
+        outline: 5px solid #c00;
+      }
+
+      rdom-embed:--connected {
+        outline: 0;
+      }
+    </style>
   </head>
-  <body style="overflow-y: scroll;">
+  <body>
     <rdom-embed src="/.rdom">
       <p>Initializing...</p>
     </rdom-embed>

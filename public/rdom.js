@@ -9,24 +9,35 @@ customElements.define(
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
+      this._internals = this.attachInternals();
+
+      const styles = new CSSStyleSheet();
+      styles.replace(":host { display: flow-root; }")
+      this.shadowRoot.adoptedStyleSheets = [styles]
     }
 
     async connectedCallback() {
-      const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT;
-      const res = await connect(endpoint);
+      try {
+        const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT;
+        const res = await connect(endpoint);
 
-      const output = initCallbackStream(
-        endpoint,
-        getSessionIdHeader(res),
-      );
+        this._internals.states?.add("--connected");
 
-      res.body
-        .pipeThrough(new TextDecoderStream())
-        .pipeThrough(new JSONDecoderStream())
-        .pipeThrough(new PatchStream(endpoint, this.shadowRoot))
-        .pipeThrough(new JSONEncoderStream())
-        .pipeThrough(new TextEncoderStream())
-        .pipeTo(output);
+        const output = initCallbackStream(
+          endpoint,
+          getSessionIdHeader(res),
+        );
+
+        await res.body
+          .pipeThrough(new TextDecoderStream())
+          .pipeThrough(new JSONDecoderStream())
+          .pipeThrough(new PatchStream(endpoint, this.shadowRoot))
+          .pipeThrough(new JSONEncoderStream())
+          .pipeThrough(new TextEncoderStream())
+          .pipeTo(output);
+      } finally {
+        this._internals.states?.delete("--connected");
+      }
     }
   }
 );
