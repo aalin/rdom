@@ -114,9 +114,7 @@ class JSONEncoderStream extends TransformStream {
   constructor() {
     super({
       transform(chunk, controller) {
-        const transformed = JSON.stringify(chunk)
-        console.log("Sending", transformed)
-        controller.enqueue(transformed + "\n")
+        controller.enqueue(JSON.stringify(chunk) + "\n")
       }
     })
   }
@@ -214,8 +212,6 @@ class PatchStream extends TransformStream {
               continue
             }
 
-            console.debug("Applying", type, args);
-
             try {
               patchFn.apply(controller, args);
             } catch (e) {
@@ -237,7 +233,6 @@ const PatchFunctions = {
     const root = document.createElement('rdom-root');
     this.nodes.set(null, root);
     this.root.appendChild(root);
-    console.warn("ROOT", this.root)
   },
   DestroyRoot() {
     const root = this.nodes.get(null);
@@ -422,8 +417,7 @@ class RDOMElement extends HTMLElement {
   assignSlot(name, nodes) {
     const slot = this.shadowRoot.getElementById(name)
     if (!slot) {
-      console.log("No slot with id", name)
-      return
+      throw new Error(`No slot with id ${id}`)
     }
     slot.assign(...nodes);
   }
