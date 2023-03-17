@@ -490,33 +490,33 @@ module VDOM
 
       class VStyles < Base
         class VStyle < Base
-          def run(element_id, name, value)
+          def run(parent_id, ref_id, name, value)
             value = Array(value).join(" ").tr("_", "-")
-            patch(Patches::SetCSSProperty[element_id, name, value])
+            patch(Patches::SetCSSProperty[parent_id, ref_id, name, value])
 
             receive do |new_value|
               new_value = Array(new_value).join(" ").tr("_", "-")
               next if new_value == value
               value = new_value
-              patch(Patches::SetCSSProperty[element_id, name, value])
+              patch(Patches::SetCSSProperty[parent_id, ref_id, name, value])
             end
           ensure
-            patch(Patches::RemoveCSSProperty[element_id, name])
+            patch(Patches::RemoveCSSProperty[parent_id, ref_id, name])
           end
         end
 
-        def run(element_id, name, value)
-          vstyles = update_styles(element_id, {}, value)
+        def run(parent_id, ref_id, name, value)
+          vstyles = update_styles(parent_id, ref_id, {}, value)
 
           receive do |value|
-            vstyles = update_styles(element_id, vstyles, value)
+            vstyles = update_styles(parent_id, ref_id, vstyles, value)
           end
         ensure
           vstyles.each_value(&:stop)
-          patch(Patches::RemoveAttribute[element_id, name])
+          patch(Patches::RemoveAttribute[parent_id, ref_id, name])
         end
 
-        def update_styles(element_id, vstyles, styles)
+        def update_styles(parent_id, ref_id, vstyles, styles)
           stopped = vstyles.except(*styles.keys)
           stopped.each_value(&:stop)
 
@@ -525,7 +525,7 @@ module VDOM
               old.resume(value)
               [name, old]
             else
-              [name, VStyle.start(element_id, name.to_s.tr("_", "-"), value)]
+              [name, VStyle.start(parent_id, ref_id, name.to_s.tr("_", "-"), value)]
             end
           end.to_h
         end
@@ -555,8 +555,8 @@ module VDOM
 
       def attr_node_class(name)
         case name
-        # in :style
-        #   VStyles
+        in :style
+          VStyles
         in /\Aon/
           VCallback
         else

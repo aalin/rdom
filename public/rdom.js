@@ -2,6 +2,7 @@ const ELEMENT_NAME = "rdom-embed"
 const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
+const DISCONNECTED_STATE = "--disconnected;"
 
 customElements.define(
   ELEMENT_NAME,
@@ -22,12 +23,12 @@ customElements.define(
         const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT;
         const res = await connect(endpoint);
 
-        this._internals.states?.delete("--disconnected");
-
         const output = initCallbackStream(
           endpoint,
           getSessionIdHeader(res),
         );
+
+        this._setConnectedState(true)
 
         await res.body
           .pipeThrough(new TextDecoderStream())
@@ -35,9 +36,17 @@ customElements.define(
           .pipeThrough(new PatchStream(endpoint, this.shadowRoot))
           .pipeThrough(new JSONEncoderStream())
           .pipeThrough(new TextEncoderStream())
-          .pipeTo(output);
+          .pipeTo(output)
       } finally {
-        this._internals.states?.add("--disconnected");
+        this._setConnectedState(false)
+      }
+    }
+
+    _setConnectedState(isConnected) {
+      if (isConnected) {
+        this._internals.states?.delete(DISCONNECTED_STATE)
+      } else {
+        this._internals.states?.add(DISCONNECTED_STATE)
       }
     }
   }
@@ -303,11 +312,19 @@ const PatchFunctions = {
   CreateDocumentFragment(id) {
     this.nodes.set(id, document.createDocumentFragment());
   },
-  SetCSSProperty(id, name, value) {
-    this.nodes.get(id).style.setProperty(name, value);
+  SetCSSProperty(parentId, refId, name, value) {
+    const parent = this.nodes.get(parentId)
+    if (!parent) return
+    const node = parent.shadowRoot.getElementById(refId);
+    if (!node) return
+    node.style.setProperty(name, value);
   },
-  RemoveCSSProperty(id, name) {
-    this.nodes.get(id)?.style?.removeProperty(name);
+  RemoveCSSProperty(parentId, refId, name) {
+    const parent = this.nodes.get(parentId)
+    if (!parent) return
+    const node = parent.shadowRoot.getElementById(refId);
+    if (!node) return
+    node.style.removeProperty(name);
   },
   SetHandler(parentId, refId, event, callbackId) {
     const parent = this.nodes.get(parentId)
@@ -349,6 +366,10 @@ class RDOMElement extends HTMLElement {
   static styles = createCustomElementStyleSheet();
 
   static define(name, html, stylesheet) {
+    if (customElements.get(name)) {
+      return
+    }
+
     customElements.define(
       name,
       class extends RDOMElement {

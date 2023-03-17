@@ -27,8 +27,8 @@ module VDOM
     SetHandler = Data.define(:parent_id, :ref_id, :name, :handler_id)
     RemoveHandler = Data.define(:parent_id, :ref_id, :name, :handler_id)
 
-    SetCSSProperty = Data.define(:id, :name, :value)
-    RemoveCSSProperty = Data.define(:id, :name)
+    SetCSSProperty = Data.define(:parent_id, :ref_id, :name, :value)
+    RemoveCSSProperty = Data.define(:parent_id, :ref_id, :name)
 
     SetTextContent = Data.define(:id, :content)
     ReplaceData = Data.define(:id, :offset, :count, :data)

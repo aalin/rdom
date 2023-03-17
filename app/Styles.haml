@@ -20,8 +20,10 @@
       %img(src="/favicon.ico")
   = computed do
     %ul
-      = items.value.map do |item|
-        %li[item]= item
+      = items.value.map.with_index do |item, i|
+        %li[item]{
+          style: { border: [i.px, :solid, "#f0f"] }
+        }= item
 
 :css
   img {
