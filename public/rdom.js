@@ -10,6 +10,7 @@ customElements.define(
       super();
       this.attachShadow({ mode: "open" });
       this._internals = this.attachInternals();
+      this._internals.states?.add("--disconnected");
 
       const styles = new CSSStyleSheet();
       styles.replace(":host { display: flow-root; }")
@@ -21,7 +22,7 @@ customElements.define(
         const endpoint = this.getAttribute("src") || DEFAULT_ENDPOINT;
         const res = await connect(endpoint);
 
-        this._internals.states?.add("--connected");
+        this._internals.states?.delete("--disconnected");
 
         const output = initCallbackStream(
           endpoint,
@@ -36,7 +37,7 @@ customElements.define(
           .pipeThrough(new TextEncoderStream())
           .pipeTo(output);
       } finally {
-        this._internals.states?.delete("--connected");
+        this._internals.states?.add("--disconnected");
       }
     }
   }
