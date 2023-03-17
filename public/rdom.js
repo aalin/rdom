@@ -2,7 +2,7 @@ const ELEMENT_NAME = "rdom-embed"
 const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
-const DISCONNECTED_STATE = "--disconnected;"
+const DISCONNECTED_STATE = "--disconnected"
 
 customElements.define(
   ELEMENT_NAME,
@@ -11,7 +11,7 @@ customElements.define(
       super();
       this.attachShadow({ mode: "open" });
       this._internals = this.attachInternals();
-      this._internals.states?.add("--disconnected");
+      this._setConnectedState(false);
 
       const styles = new CSSStyleSheet();
       styles.replace(":host { display: flow-root; }")
