@@ -175,6 +175,7 @@ module VDOM
           {
             "content-type" => asset.content_type,
             "cache-control" => ASSET_CACHE_CONTROL,
+            **origin_header(request),
           },
           [asset.content]
         ]
