@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RDOM embed demo</title>
+    <script type="esms-options">
+      { "polyfillEnable": ["css-modules"] }
+    </script>
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.7.0/dist/es-module-shims.js"></script>
     <style>
       html {
         height: 100%;
@@ -58,7 +62,7 @@
 
     <main>
       <!-- This is all you need to embed rdom -->
-      <script type="module" src="https://rdom.fly.dev/rdom.js"></script>
+      <script type="module-shim" src="https://rdom.fly.dev/rdom.js"></script>
 
       <rdom-embed src="https://rdom.fly.dev/.rdom">
         <p>Initializing...</p>
