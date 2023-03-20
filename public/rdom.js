@@ -208,6 +208,9 @@ class PatchStream extends TransformStream {
         controller.nodes = new Map();
 
         controller.rafQueue = new RAFQueue((patches) => {
+          console.debug('Applying', patches.length, 'patches');
+          console.time('patch');
+
           for (const patch of patches) {
             const [type, ...args] = patch;
             const patchFn = PatchFunctions[type];
@@ -223,6 +226,8 @@ class PatchStream extends TransformStream {
               console.error(e);
             }
           }
+
+          console.timeEnd('patch');
         });
       },
       transform(patch, controller) {
