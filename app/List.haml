@@ -1,35 +1,53 @@
 :ruby
-  Item = Data.define(:value) do
+  Item = Data.define(:value, :color) do
     def id = object_id
     def to_s = value.to_s
   end
 
-  INITIAL_ITEMS = %w[0 1 2 3 4 5 6 7 8 9].map { Item[_1] }.freeze
+  INITIAL_ITEMS = 10.times.map { Item[_1.to_s, rand] }.freeze
 
 :ruby
   input = signal("")
+  value = signal("")
+
   items = signal(INITIAL_ITEMS)
 
   oninput = ->(target:, **) do
     input.value = target[:value].to_s.strip
   end
 
+  onchange = ->(target:, **) do
+    input.value = value.value = target[:value].to_s.strip
+  end
+
+  add_disabled = computed do
+    input.value.empty?
+  end
+
   prepend = -> do
-    break if input.value.empty?
-    items.value = [Item[input.value], *items.value]
-    input.value = ""
+    break if value.value.empty?
+    items.value = [Item[value.value, rand], *items.value]
+    input.value = value.value = ""
   end
 
   append = -> do
-    break if input.value.empty?
-    items.value = [*items.value, Item[input.value]]
-    input.value = ""
+    break if value.value.empty?
+    items.value = [*items.value, Item[value.value, rand]]
+    input.value = input.value = ""
   end
 
   sort = -> { items.value = items.value.sort_by(&:value) }
+  sort_by_color = -> { items.value = items.value.sort_by(&:color) }
   shuffle = -> { items.value = items.value.shuffle }
   reverse = -> { items.value = items.value.reverse }
   clear = -> { items.value = [] }
+  reset = -> { items.value = INITIAL_ITEMS }
+
+  insert = ->(target:, **) do
+    items.value += target[:value].to_i.times.map { Item.new(SecureRandom.alphanumeric(8), rand) }
+  end
+
+  count = computed { items.value.length }
 
 %article
   %p This page exists to demonstrate reordering.
@@ -37,26 +55,30 @@
     %fieldset
       %legend Add
       .buttons
-        %input(type="text" oninput=oninput autocomplete="off" value=input)
-        %button(onclick=prepend) Prepend
-        %button(onclick=append) Append
+        %input(type="text" oninput=oninput onchange=onchange autocomplete="off" value=value)
+        %button(onclick=prepend disabled=add_disabled) Prepend
+        %button(onclick=append disabled=add_disabled) Append
     %fieldset
       %legend Actions
       .buttons
         %button(onclick=sort) Sort
+        %button(onclick=sort_by_color) Sort by color
         %button(onclick=reverse) Reverse
         %button(onclick=shuffle) Shuffle
         %button(onclick=clear) Clear
+        %button(onclick=reset) Reset
+        %button(onclick=insert value=100) Insert 100
+        %button(onclick=insert value=500) Insert 500
+        %button(onclick=insert value=1000) Insert 1000
+  %p
+    Number of items:
+    %span= count
   .flex
     .list
       = computed do
         %ul
           = items.value.map do |item|
-            %li[item.id]= item
-    %div
-      %p The order in the list should match this order:
-      = computed do
-        %pre= items.value.map(&:inspect).join("\n")
+            %li[item]{ style: { background: format("hsl(%.8fturn 75%% 75%%)", item.color) } }= item.value
 
 :css
   .flex {
@@ -70,8 +92,24 @@
     gap: 1em;
   }
 
-  .list {
-    min-width: 5em;
+  ul {
+    font-family: monospace;
+    margin: .5em;
+    padding: 0;
+    list-style-type: none;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+  }
+
+  li {
+    margin: 0;
+    display: block;
+    border: 1px solid #0003;
+    border-radius: 2px;
+    flex: 1 1;
+    text-align: center;
   }
 
   fieldset {
