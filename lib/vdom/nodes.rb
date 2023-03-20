@@ -457,7 +457,7 @@ module VDOM
 
         def update_dynamic(parent_id, ref_id, name, signal, &)
           effect = Reactively::API::Effect.new do
-            patch(Patches::SetAttribute[parent_id, ref_id, name, signal.value.to_s])
+            update_static(parent_id, ref_id, name, signal.value)
           end
 
           yield
@@ -466,8 +466,13 @@ module VDOM
         end
 
         def update_static(parent_id, ref_id, name, value, &)
-          patch(Patches::SetAttribute[parent_id, ref_id, name, value.to_s])
-          yield
+          if value
+            patch(Patches::SetAttribute[parent_id, ref_id, name, value.to_s])
+          else
+            patch(Patches::RemoveAttribute[parent_id, ref_id, name])
+          end
+
+          yield if block_given?
         end
       end
 
