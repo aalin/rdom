@@ -116,17 +116,25 @@ module VDOM
         with_text_node(content.to_s) do |id|
           mount_dom_node(id) do
             receive do |new_content|
-              content = TextDiff.diff(
-                id,
-                content,
-                new_content.to_s
-              ) { patch(_1) }
+              content = update_content(id, content, new_content.to_s)
             end
           end
         end
       end
 
       private
+
+      def update_content(id, content, new_content)
+        if content == new_content
+          return content
+        end
+
+        TextDiff.diff(
+          id,
+          content,
+          new_content.to_s
+        ) { patch(_1) }
+      end
 
       def with_text_node(content, id: generate_id)
         patch(Patches::CreateTextNode[id, content])
