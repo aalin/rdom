@@ -363,11 +363,16 @@ module VDOM
       children.map do |child|
         case child
         in { type: :tag }
-          name = child.value[:name].to_s
-          if name[0].upcase == name[0]
+          case child.value[:name].to_s
+          in /\A[[:upper:]]/
             create_slot(
               custom_element,
               build_component(custom_element, child)
+            )
+          in "slot"
+            create_slot(
+              custom_element,
+              build_slotted(custom_element, child)
             )
           else
             build_tag(custom_element, child)
@@ -400,6 +405,31 @@ module VDOM
       )
     end
 
+    def build_slotted(custom_element, node)
+      node.value => {
+        name:, attributes:, dynamic_attributes:, value:, parse:, object_ref:
+      }
+
+      props =
+        if attributes["name"]
+          parse_ruby(attributes["name"].inspect)
+        else
+          Ident("nil")
+        end
+
+      [
+        ARef(
+          CallNode(
+            VarRef(Ident("self")),
+            Period("."),
+            Ident("slots"),
+            nil
+          ),
+          Args(Array(props))
+        )
+      ]
+    end
+
     def build_component(custom_element, node)
       node.value => {
         name:, attributes:, dynamic_attributes:, value:, parse:, object_ref:
@@ -416,6 +446,9 @@ module VDOM
 
       args = [
         VarRef(Const(name.to_s)),
+        unless parse
+          StringLiteral([TStringContent(value)], "'")
+        end,
         BareAssocHash([
           if key
             Assoc(

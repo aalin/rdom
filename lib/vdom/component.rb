@@ -28,6 +28,7 @@ module VDOM
 
       def state = @state ||= {}
       def props = @props ||= {}
+      def slots = @slots ||= {}
 
       def mount = nil
       def render = nil

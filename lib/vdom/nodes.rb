@@ -75,7 +75,9 @@ module VDOM
 
       def receive(&)
         if block_given?
-          loop { yield(*@incoming.dequeue) }
+          loop do
+            yield(*@incoming.dequeue)
+          end
         else
           @incoming.dequeue
         end
@@ -171,6 +173,7 @@ module VDOM
         end
 
         @slots = group_descriptors_by_slots(descriptor.children)
+        instance.instance_variable_set(:@slots, @slots)
 
         VAny.run(instance.render) do |vnode|
           async { instance.mount }
@@ -181,6 +184,7 @@ module VDOM
               vnode.resume(instance.render)
             in Descriptor
               @slots = group_descriptors_by_slots(descriptor.children)
+              instance.instance_variable_set(:@slots, @slots)
               instance.instance_variable_set(:@props, descriptor.props)
               vnode.resume(instance.render)
             end
@@ -312,14 +316,13 @@ module VDOM
             next if new_order == order
             order = new_order
 
+            puts "Updating order for #{parent_id} #{order.size}"
             patch(Patches::AssignSlot[parent_id, slot_name, order])
           end
         end
 
         def calculate_order(children)
           children
-            .values
-            .flatten
             .sort_by(&:index)
             .map(&:dom_id)
             .compact
@@ -361,7 +364,7 @@ module VDOM
         @reorder = Async::Condition.new
         @parent_id = parent_id
         @name = name
-        @semaphore = Async::Semaphore.new(1)
+        @semaphore = Async::Semaphore.new(2)
 
         children = update_children({}, descriptors)
 
@@ -371,7 +374,6 @@ module VDOM
               @semaphore.acquire do
                 update_order.resume(children)
               end
-
               @reorder.wait
             end
           end
@@ -383,7 +385,7 @@ module VDOM
             end
           end
         ensure
-          children.values.flatten.each(&:stop)
+          children.each(&:stop)
           children.clear
         end
       end
@@ -395,31 +397,39 @@ module VDOM
         )
       end
 
-      def diff_children(children, descriptors)
-        descriptors
-          .map.with_index do |descriptor, index|
-            if found = children[Descriptor.get_hash(descriptor)]&.shift
-              found.index = index
-              found
-            else
-              child = VChild.new
-              child.hash = Descriptor.get_hash(descriptor)
-              child.index = index
-              child.start(descriptor)
-              child
+      def diff_children(children, descriptors, task: Async::Task.current)
+        grouped = children.group_by(&:hash)
+
+        new_children =
+          descriptors
+            .map.with_index do |descriptor, index|
+              if found = grouped[Descriptor.get_hash(descriptor)]&.shift
+                found.index = index
+                [found, descriptor]
+              else
+                child = VChild.new
+                child.hash = Descriptor.get_hash(descriptor)
+                child.index = index
+                child.start(descriptor)
+                [child, descriptor]
+              end
             end
-          end
-          .zip(descriptors)
-          .map do |child, descriptor|
-            child.resume(descriptor)
-            child
-          end
-          .tap do
-            if children
-              children.values.flatten.each(&:stop)
+
+        task.async do |subtask|
+          new_children.each_slice(50) do |slice|
+            slice.each do |child, descriptor|
+              child.resume(descriptor)
             end
+
+            sleep 0
           end
-          .group_by(&:hash)
+        end
+
+        task.async do
+          grouped.values.flatten.each(&:stop)
+        end
+
+        new_children.map(&:first)
       end
 
       def normalize_descriptors(descriptors)

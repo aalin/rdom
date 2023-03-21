@@ -52,9 +52,10 @@ module VDOM
 
       private
 
-      def input_loop(vroot)
+      def input_loop(vroot, task: Async::Task.current)
         loop do
-          handle_input(vroot, @input.dequeue)
+          msg = @input.dequeue
+          task.async { handle_input(vroot, msg) }
         rescue Protocol::HTTP2::ProtocolError, EOFError => e
           Console.logger.error(self, e)
           raise
@@ -93,7 +94,7 @@ module VDOM
         while patch = vroot.take
           @output.enqueue(VDOM::Patches.serialize(patch))
           # Uncomment the following line to add some latency
-          # sleep 0.01
+          # sleep 0.0005
         end
       rescue IOError, Errno::EPIPE, Protocol::HTTP2::ProtocolError => e
         puts "\e[31m#{e.message}\e[0m"
