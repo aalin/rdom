@@ -1,4 +1,6 @@
 :ruby
+  Button = import("Button.haml")
+
   Item = Data.define(:value, :color) do
     def id = object_id
     def to_s = value.to_s
@@ -73,6 +75,7 @@
   %p
     Number of items:
     %span= count
+    %Button hello
   .flex
     .list
       = computed do
@@ -89,7 +92,13 @@
 
   .buttons {
     display: flex;
+    flex-wrap: wrap;
     gap: 1em;
+  }
+
+  button, input {
+    flex: 1;
+    display: inline-block;
   }
 
   ul {
@@ -113,5 +122,5 @@
   }
 
   fieldset {
-    flex: 1 1;
+    flex: 1 1 20em;
   }

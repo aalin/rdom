@@ -1,0 +1,38 @@
+:ruby
+  def initialize(**)
+    @b = {}
+  end
+
+  def mount
+    loop do
+      GC.stat(@b)
+      rerender!
+      sleep 1
+    end
+  end
+
+%div
+  %button{onclick: ->{ GC.start }} Run GC
+  %dl
+    = @b.map do |k, v|
+      .entry[k]
+        %dt= k
+        %dd= v
+
+:css
+  dl {
+    columns: 16em auto;
+  }
+
+  .entry {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  dt {
+    font-weight: bold;
+  }
+  dl {
+    text-align: right;
+  }

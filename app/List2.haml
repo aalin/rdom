@@ -1,0 +1,18 @@
+:ruby
+  List = import("List.haml")
+
+.flex
+  .list
+    %List
+  .list
+    %List
+
+:css
+  .flex {
+    display: flex;
+    gap: 1em;
+  }
+
+  .list {
+    flex: 1 0 50%;
+  }
