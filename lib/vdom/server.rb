@@ -7,15 +7,6 @@ require "async/http/protocol/response"
 require "async/http/server"
 require_relative "assets"
 
-class Async::HTTP::Protocol::HTTP2::Request
-  def deconstruct_keys(keys)
-    keys
-      .filter { instance_variable_defined?("@#{_1}") }
-      .map { [_1, instance_variable_get("@#{_1}")] }
-      .to_h
-  end
-end
-
 module VDOM
   class Server
     class Session
@@ -103,7 +94,23 @@ module VDOM
       end
     end
 
+    module RequestRefinements
+      refine Async::HTTP::Protocol::HTTP2::Request do
+        def deconstruct_keys(keys)
+          keys.each_with_object({}) do |key, obj|
+            var = "@#{key}"
+
+            if instance_variable_defined?(var)
+              obj[key] = instance_variable_get(var)
+            end
+          end
+        end
+      end
+    end
+
     class App
+      using RequestRefinements
+
       SESSION_ID_HEADER_NAME = "x-rdom-session-id"
 
       ALLOW_HEADERS = {
@@ -130,20 +137,20 @@ module VDOM
           "#{request.method} #{request.path}",
         )
 
-        case request.path
-        in "/"
+        case request
+        in path: "/"
           handle_index(request)
-        in "/favicon.ico"
+        in path: "/favicon.ico"
           handle_favicon(request)
-        in "/rdom.js"
+        in path: "/rdom.js"
           handle_script(request)
-        in "/.rdom" if request.method == "OPTIONS"
+        in path: "/.rdom", method: "OPTIONS"
           handle_options(request)
-        in "/.rdom" if request.method == "GET"
+        in path: "/.rdom", method: "GET"
           handle_rdom_get(request)
-        in "/.rdom" if request.method == "POST"
+        in path: "/.rdom", method: "POST"
           handle_rdom_post(request)
-        in %r{\A/\.rdom/(.+)\z} if request.method == "GET"
+        in path: %r{\A/\.rdom/(.+)\z}, method: "GET"
           handle_rdom_asset(request)
         else
           handle_404(request)
