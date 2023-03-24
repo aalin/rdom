@@ -206,13 +206,15 @@ class PatchStream extends TransformStream {
         controller.endpoint = endpoint;
         controller.root = root;
         controller.nodes = new Map();
+        controller.navigationPromise = null;
 
-        controller.rafQueue = new RAFQueue((patches) => {
+        controller.rafQueue = new RAFQueue(async (patches) => {
           console.debug('Applying', patches.length, 'patches');
           console.time('patch');
 
           for (const patch of patches) {
             const [type, ...args] = patch;
+
             const patchFn = PatchFunctions[type];
 
             if (!patchFn) {
@@ -221,7 +223,7 @@ class PatchStream extends TransformStream {
             }
 
             try {
-              patchFn.apply(controller, args);
+              await patchFn.apply(controller, args);
             } catch (e) {
               console.error(e);
             }
@@ -238,11 +240,58 @@ class PatchStream extends TransformStream {
   }
 }
 
+function startViewTransition() {
+  if (!document.startViewTransition) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    document.startViewTransition(() => resolve());
+  })
+}
+
+function setupNavigationListener(controller) {
+  navigation.addEventListener("navigate", e => {
+    console.log(e);
+
+    if (!e.canIntercept || e.hashChange) {
+      return;
+    }
+
+    controller.navigationPromise ||= new Promise();
+
+    e.intercept({
+      async handler() {
+        e.signal.addEventListener("abort", () => {
+          promise.reject()
+          controller.navigationPromise = null
+        });
+
+        await promise;
+        controller.navigationPromise = null
+      }
+    });
+  });
+}
+
 const PatchFunctions = {
+  Event(name, payload = {}) {
+    console.warn('Event', name, payload)
+
+    switch (name) {
+      case 'startViewTransition': {
+        return startViewTransition();
+      }
+      default: {
+        break;
+      }
+    }
+  },
   CreateRoot() {
     const root = document.createElement('rdom-root');
     this.nodes.set(null, root);
     this.root.appendChild(root);
+    // setupNavigationListener(this)
   },
   DestroyRoot() {
     const root = this.nodes.get(null);

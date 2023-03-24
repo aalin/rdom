@@ -1,0 +1,6 @@
+:ruby
+  Directory = import("Files/Directory.haml")
+:ruby
+  path = File.expand_path(Dir.pwd)
+%div
+  %Directory(path=path open=true)

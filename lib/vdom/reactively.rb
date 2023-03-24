@@ -85,16 +85,7 @@ module VDOM
         @value
       end
 
-      def value=(new_value = nil, &fn)
-        if block_given?
-          unless fn == @fn
-            stale(CacheDirty)
-          end
-          @fn = fn
-
-          return
-        end
-
+      def value=(new_value)
         if @fn
           remove_parent_observers(0)
           @sources = nil
@@ -109,6 +100,14 @@ module VDOM
 
         # puts "Setting value from #{@value.inspect} to #{new_value.inspect}"
         @value = new_value
+      end
+
+      def set_fn(&fn)
+        unless fn == @fn
+          stale(CacheDirty)
+        end
+
+        @fn = fn
       end
 
       protected

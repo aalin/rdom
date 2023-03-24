@@ -1,11 +1,13 @@
 :ruby
   def initialize(**)
     @b = {}
+    @o = {}
   end
 
   def mount
     loop do
       GC.stat(@b)
+      ObjectSpace.count_objects(@o)
       rerender!
       sleep 1
     end
@@ -15,6 +17,11 @@
   %button{onclick: ->{ GC.start }} Run GC
   %dl
     = @b.map do |k, v|
+      .entry[k]
+        %dt= k
+        %dd= v
+  %dl
+    = @o.map do |k, v|
       .entry[k]
         %dt= k
         %dd= v

@@ -6,6 +6,8 @@
   List2 = import("List2.haml")
   Styles = import("Styles.haml")
   GC = import("GC.haml")
+  Files = import("Files.haml")
+  Life = import("Life.haml")
 
   PAGES = [
     StartPage,
@@ -14,12 +16,16 @@
     Haml,
     Styles,
     GC,
+    Files,
+    Life,
   ]
 
   def initialize(**)
     @page = PAGES.first
   end
 
+:ruby
+  emit!(:startViewTransition)
 %section
   %header
     %h1
@@ -47,9 +53,10 @@
     flex-wrap: wrap;
     list-style-type: none;
     padding: 1em;
-    background: #0001;
+    background: var(--menu-bg);
     border-radius: 2px;
   }
+
   header {
     display: flex;
     align-items: center;

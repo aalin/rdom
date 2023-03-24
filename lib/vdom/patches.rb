@@ -37,6 +37,8 @@ module VDOM
 
     Ping = Data.define(:time)
 
+    Event = Data.define(:event, :payload)
+
     def self.serialize(patch)
       [patch.class.name[/[^:]+\z/], *patch.deconstruct]
     end

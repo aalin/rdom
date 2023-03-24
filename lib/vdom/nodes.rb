@@ -44,7 +44,7 @@ module VDOM
       end
 
       def inspect
-        "#<#{self.class.name} #{@task.inspect}>"
+        "#<#{self.class.name}>"
       end
 
       def start(...)
@@ -60,13 +60,19 @@ module VDOM
 
       def run(...) =
         raise(NotImplementedError, "#{self.class.name}##{__method__} is not implemented")
-      def resume(*args) =
+
+      def resume(*args)
+        # empty queue first, then enqueue the new args,
+        # so that we don't process something that will be updated anyways.
+        @incoming.dequeue until @incoming.empty?
         @incoming.enqueue(args)
+      end
+
       def stop =
         @task&.stop
 
       def dom_id(traverse = false) =
-        @dom_id || (traverse && parent.dom_id)
+        @dom_id || (traverse && parent.dom_id) || nil
 
       protected
 
@@ -76,7 +82,7 @@ module VDOM
       def receive(&)
         if block_given?
           loop do
-            yield(*@incoming.dequeue)
+            yield(*receive)
           end
         else
           @incoming.dequeue
@@ -91,8 +97,10 @@ module VDOM
         end
       end
 
+      def task =
+        @task || @parent&.task || Async::Task.current
       def async(&) =
-        (@task || @parent || Async::Task.current).async(&)
+        task.async(&)
       def hierarchy =
         [*parent.hierarchy, self]
       def running? =
@@ -159,6 +167,9 @@ module VDOM
         end
       end
 
+      def emit!(event, **payload) =
+        patch(Patches::Event[event, payload])
+
       def run(descriptor)
         instance = descriptor.type.allocate
         # Define @props before calling initialize,
@@ -169,6 +180,10 @@ module VDOM
         yield_self do |vcomponent|
           instance.define_singleton_method(:rerender!) do
             vcomponent.resume(:rerender!)
+          end
+
+          instance.define_singleton_method(:emit!) do |event, **payload|
+            vcomponent.emit!(event, **payload)
           end
         end
 
@@ -316,7 +331,7 @@ module VDOM
             next if new_order == order
             order = new_order
 
-            puts "Updating order for #{parent_id} #{order.size}"
+            puts "Updating order for #{parent_id} #{order.size}" if order.size > 1
             patch(Patches::AssignSlot[parent_id, slot_name, order])
           end
         end
@@ -364,22 +379,23 @@ module VDOM
         @reorder = Async::Condition.new
         @parent_id = parent_id
         @name = name
-        @semaphore = Async::Semaphore.new(2)
+        @semaphore = Async::Semaphore.new(1)
 
         children = update_children({}, descriptors)
 
         UpdateOrder.run(parent_id, name, children) do |update_order|
           async do
             loop do
-              @semaphore.acquire do
+              @semaphore.async do
                 update_order.resume(children)
               end
+
               @reorder.wait
             end
           end
 
           receive do |descriptors|
-            @semaphore.acquire do
+            @semaphore.async do
               children = update_children(children, descriptors)
               reorder!
             end
@@ -396,6 +412,8 @@ module VDOM
           normalize_descriptors(descriptors),
         )
       end
+
+      UPDATE_SLICE_SIZE = 10
 
       def diff_children(children, descriptors, task: Async::Task.current)
         grouped = children.group_by(&:hash)
@@ -415,18 +433,20 @@ module VDOM
               end
             end
 
+        task.async do
+          grouped.values.flatten.each(&:stop)
+        end
+
         task.async do |subtask|
-          new_children.each_slice(50) do |slice|
-            slice.each do |child, descriptor|
-              child.resume(descriptor)
-            end
+          new_children.each_slice(UPDATE_SLICE_SIZE) do |slice|
+            subtask.async do
+              slice.each do |child, descriptor|
+                child.resume(descriptor)
+              end
+            end.wait
 
             sleep 0
           end
-        end
-
-        task.async do
-          grouped.values.flatten.each(&:stop)
         end
 
         new_children.map(&:first)
@@ -437,7 +457,7 @@ module VDOM
       end
 
       def mount_dom_node(id)
-        puts "Mounting #{id} into #{@parent_id}"
+        # puts "Mounting #{id} into #{@parent_id}"
         patch(Patches::InsertBefore[@parent_id, id, nil])
         reorder!
         yield

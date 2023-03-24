@@ -1,0 +1,61 @@
+:ruby
+  Self = self
+
+  def initialize(open: false, **)
+    @open = open
+  end
+
+  def handle_click
+    @open = !self.state[:open]
+  end
+
+.directory(aria-expanded=@open)
+  %h3{onclick: method(:handle_click)}
+    = File.basename($path)
+    = "/"
+  = if @open
+    %ul
+      = Dir.entries($path).to_a.difference(%w[. ..]).sort_by(&:downcase).map do |entry|
+        - path = File.join($path, entry)
+        - is_dir = File.directory?(path)
+        %li[entry]{class: is_dir ? "dir" : "file"}
+          = File.directory?(path) ? H[Self, path:] : entry
+
+:css
+  h3 {
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+    font-size: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--link-color);
+  }
+
+  .directory[aria-expanded] > h3 {
+    font-weight: bold;
+  }
+
+  .dir {
+    list-style-type: '📁 ';
+  }
+
+  .file {
+    list-style-type: '📄 ';
+  }
+
+  ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    padding-left: 1em;
+  }
+
+  ul:empty {
+    display: none;
+  }
+
+  li {
+    margin: 0;
+    padding: 0;
+  }

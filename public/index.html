@@ -10,8 +10,22 @@
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.7.0/dist/es-module-shims.js"></script>
     <script type="module-shim" src="/rdom.js"></script>
     <style>
+      :root {
+        --link-color: #00f;
+        --background: #fff;
+        --color: 0deg 0% 0%;
+        --menu-bg: #0002;
+      }
+
       body {
         overflow-y: scroll;
+        background: var(--background);
+        color: var(--color);
+      }
+
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation-duration: 100ms;
       }
 
       rdom-embed:--disconnected {

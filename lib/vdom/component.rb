@@ -47,6 +47,10 @@ module VDOM
       def rerender!
         # this method will be defined on each component.
       end
+
+      def emit!(event, **payload)
+        # this method will be defined on each component.
+      end
     end
 
     @loaded_components = {}

@@ -1,0 +1,105 @@
+:ruby
+  WIDTH = 10
+  HEIGHT = 10
+
+  def initialize(**)
+    @grid = Array.new(HEIGHT) { Array.new(WIDTH) { false } }
+    @speed = 0.5
+  end
+
+  def mount
+    loop do
+      sleep @speed
+      update_grid
+    end
+  end
+
+  def randomize_grid
+    @grid = @grid.map do |cells|
+      cells.map { rand(2).zero? }
+    end
+  end
+
+  def update_speed(target:, **)
+    @speed = target[:value].to_f
+  end
+
+  def update_grid
+    @grid = @grid.map.with_index do |row, y|
+      row.map.with_index do |cell, x|
+        sum = sum_neighbors(@grid, x, y)
+
+        if cell
+          # Any live cell with two or three live neighbours survives.
+          # All other live cells die in the next generation.
+          sum == 2 || sum == 3
+        else
+          # Any dead cell with three live neighbours becomes a live cell.
+          # Similarly, all other dead cells stay dead.
+          sum == 3
+        end
+      end
+    end
+  end
+
+  def sum_neighbors(grid, x, y)
+    (y.pred..y.succ).sum do |yy|
+      (x.pred..x.succ).sum do |xx|
+        case
+        when yy == y && xx == x
+          0
+        when grid[yy % HEIGHT][xx % WIDTH]
+          1
+        else
+          0
+        end
+      end
+    end
+  end
+%div
+  .buttons
+    %input(type="range" min="0.1" max="1.0" step="0.01"){oninput: method(:update_speed)}
+    %button{onclick: method(:randomize_grid)} Randomize
+  .grid
+    = @grid.map.with_index do |row, y|
+      .row[y]
+        = row.map.with_index do |cell, x|
+          .cell[x](data-alive=cell)
+            %span= "#{x},#{y}"
+:css
+  .grid {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    border: 1px solid #000;
+    font-family: monospace;
+  }
+
+  .row {
+    display: flex;
+    gap: 1px;
+    flex: 1 1;
+  }
+
+  .cell {
+    flex: 1 1;
+    aspect-ratio: 1;
+    background: #fff;
+    color: #000;
+    position: relative;
+    transition: background 50ms, color 50ms;
+  }
+
+  .cell > span {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    font-size: .4em;
+  }
+
+  .cell[data-alive] {
+    background: #000;
+    color: #fff;
+  }
