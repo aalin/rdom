@@ -48,6 +48,8 @@ module VDOM
         descriptor
       in Reactively::API::Readable
         descriptor
+      in S::Reactive
+        descriptor
       else
         (descriptor && descriptor.to_s) || nil
       end

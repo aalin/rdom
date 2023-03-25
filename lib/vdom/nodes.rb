@@ -171,37 +171,39 @@ module VDOM
         patch(Patches::Event[event, payload])
 
       def run(descriptor)
-        instance = descriptor.type.allocate
-        # Define @props before calling initialize,
-        # so we can use self.props inside initialize.
-        instance.instance_variable_set(:@props, descriptor.props)
-        instance.send(:initialize, **descriptor.props)
+        S.root do
+          instance = descriptor.type.allocate
+          # Define @props before calling initialize,
+          # so we can use self.props inside initialize.
+          instance.instance_variable_set(:@props, descriptor.props)
+          instance.send(:initialize, **descriptor.props)
 
-        yield_self do |vcomponent|
-          instance.define_singleton_method(:rerender!) do
-            vcomponent.resume(:rerender!)
+          yield_self do |vcomponent|
+            instance.define_singleton_method(:rerender!) do
+              vcomponent.resume(:rerender!)
+            end
+
+            instance.define_singleton_method(:emit!) do |event, **payload|
+              vcomponent.emit!(event, **payload)
+            end
           end
 
-          instance.define_singleton_method(:emit!) do |event, **payload|
-            vcomponent.emit!(event, **payload)
-          end
-        end
+          @slots = group_descriptors_by_slots(descriptor.children)
+          instance.instance_variable_set(:@slots, @slots)
 
-        @slots = group_descriptors_by_slots(descriptor.children)
-        instance.instance_variable_set(:@slots, @slots)
+          VAny.run(instance.render) do |vnode|
+            async { instance.mount }
 
-        VAny.run(instance.render) do |vnode|
-          async { instance.mount }
-
-          receive do |descriptor|
-            case descriptor
-            in :rerender!
-              vnode.resume(instance.render)
-            in Descriptor
-              @slots = group_descriptors_by_slots(descriptor.children)
-              instance.instance_variable_set(:@slots, @slots)
-              instance.instance_variable_set(:@props, descriptor.props)
-              vnode.resume(instance.render)
+            receive do |descriptor|
+              case descriptor
+              in :rerender!
+                vnode.resume(instance.render)
+              in Descriptor
+                @slots = group_descriptors_by_slots(descriptor.children)
+                instance.instance_variable_set(:@slots, @slots)
+                instance.instance_variable_set(:@props, descriptor.props)
+                vnode.resume(instance.render)
+              end
             end
           end
         end
@@ -486,10 +488,23 @@ module VDOM
         end
 
         def update_attribute(parent_id, ref_id, name, value, &)
-          if value in Reactively::API::Readable
+          case value
+          in Reactively::API::Readable
             update_dynamic(parent_id, ref_id, name, value, &)
+          in S::Reactive
+            update_reactive(parent_id, ref_id, name, value, &)
           else
             update_static(parent_id, ref_id, name, value, &)
+          end
+        end
+
+        def update_reactive(parent_id, ref_id, name, signal, &)
+          S.root do
+            S.effect do
+              update_static(parent_id, ref_id, name, signal.value)
+            end
+
+            yield
           end
         end
 
@@ -622,6 +637,24 @@ module VDOM
       end
     end
 
+    class VReactive < Base
+      def run(signal)
+        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
+          S.root do
+            S.effect do
+              vnode.resume(Descriptor.normalize_children(signal.value))
+            end
+
+            receive do |new_signal|
+              unless signal == new_signal
+                raise "Signal changed!"
+              end
+            end
+          end
+        end
+      end
+    end
+
     class VReactively < Base
       def run(signal)
         VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
@@ -674,6 +707,8 @@ module VDOM
         case descriptor
         in Reactively::API::Readable
           VReactively
+        in S::Reactive
+          VReactive
         in Array
           VFragment
         in Descriptor[type: CustomElement]

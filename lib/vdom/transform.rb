@@ -48,7 +48,7 @@ module VDOM
           ClassDeclaration(
             ConstPathRef(
               VarRef(Ident("self")),
-              Const("Component")
+              Const("Export")
             ),
             ConstPathRef(
               VarRef(Const("VDOM")),
