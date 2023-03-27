@@ -218,7 +218,6 @@ module S
       S.batch do
         Utils.with_fiber_local(CURRENT_KEY, self) do
           Reactive.track do
-            mark!(States::Clean)
             @sources.clear
             @compute.call
           end
@@ -249,7 +248,7 @@ module S
   class Effect < Computed
     def initialize
       super
-      self.value = call
+      update
     end
 
     def value
