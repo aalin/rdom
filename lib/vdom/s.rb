@@ -188,7 +188,7 @@ module S
 
       return unless dirty?
 
-      old_sources = @sources.values.to_a
+      old_sources = @sources.dup
 
       begin
         cleanup!
@@ -196,10 +196,12 @@ module S
       rescue => e
         raise e
       ensure
-        @state = States::Clean
-      end
+        mark!(States::Clean)
 
-      old_sources.each(&:stop)
+        old_sources.each do |source, listener|
+          listener.stop
+        end
+      end
     end
 
     def wait_for_sources(barrier: Async::Barrier.new)
