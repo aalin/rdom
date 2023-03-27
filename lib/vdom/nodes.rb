@@ -548,13 +548,7 @@ module VDOM
           lambda do |payload|
             root.batch do
               S.untrack do
-                async do
-                  if handler.arity.zero?
-                    handler.call
-                  else
-                    handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
-                  end
-                end
+                handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
               end
             end
           end
