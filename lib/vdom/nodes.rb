@@ -658,9 +658,7 @@ module VDOM
       def run(signal)
           VAny.run(Descriptor.normalize_children(signal.peek)) do |vnode|
             sub = signal.subscribe do |value|
-              puts "Updating reactive #{value.inspect}"
               vnode.resume(Descriptor.normalize_children(value))
-              puts "Updated reactive #{value.inspect}"
             end
 
             receive do |new_signal|

@@ -95,7 +95,6 @@ module S
       Root.current!.batch do
         mark!(States::Clean)
         unless @value == value
-          puts "#{self.inspect} updated value from #{@value.inspect} to #{value.inspect}"
           @value = value
           notify(States::Dirty)
         end
@@ -104,14 +103,14 @@ module S
 
     def notify(state)
       unless @condition.empty?
-        puts "\e[1;31m#{self.inspect} notifying #{state}\e[0m"
+        # puts "\e[1;31m#{self.inspect} notifying #{state}\e[0m"
         @condition.signal(state)
       end
     end
 
     def mark!(state)
       unless @state == state
-        puts "#{self.inspect} changed to #{state}"
+        # puts "#{self.inspect} changed to #{state}"
         @state = state
       end
     end
@@ -160,11 +159,11 @@ module S
         raise CycleDetectedError
       end
 
-      puts "\e[36mSubscribing #{self.inspect} to #{source.inspect}\e[0m"
+      # puts "\e[36mSubscribing #{self.inspect} to #{source.inspect}\e[0m"
       @sources[source] ||=
         @barrier.async do |subtask|
           while state = source.wait
-            puts "#{self.inspect} got #{state}"
+            # puts "#{self.inspect} got #{state}"
             if @state < state
               enqueue_effect # if clean?
               mark!(state)
@@ -186,7 +185,10 @@ module S
 
       wait_for_sources if check?
 
-      return unless dirty?
+      unless dirty?
+        mark!(States::Clean)
+        return
+      end
 
       old_sources = @sources.dup
 
@@ -204,7 +206,7 @@ module S
 
     def wait_for_sources(barrier: Async::Barrier.new)
       return if @sources.empty?
-      puts "#{self.inspect} waiting for #{@sources.keys.inspect}"
+      # puts "#{self.inspect} waiting for #{@sources.keys.inspect}"
 
       @sources.each_key do |source|
         source.peek
@@ -253,11 +255,6 @@ module S
       update
     end
 
-    def value
-      puts "Getting #{self.inspect}.value"
-      super
-    end
-
     def enqueue_effect =
       Root.current!.enqueue(self)
   end
@@ -269,7 +266,7 @@ module S
     end
 
     def enqueue(effect)
-      puts "\e[34mENQUEUE: #{effect.inspect}\e[0m"
+      # puts "\e[34mENQUEUE: #{effect.inspect}\e[0m"
       @queue.enqueue(effect)
     end
 
@@ -292,17 +289,15 @@ module S
       return if @queue.empty?
 
       Reactive.untrack do
-        puts "\e[1;3m FLUSHING #{self} \e[0m"
+        # puts "\e[1;3m FLUSHING #{self} \e[0m"
 
         catch_error do
           until @queue.empty?
             effect = @queue.dequeue
-            puts "\e[3;35mRunning #{effect.inspect}\e[0m"
+            # puts "\e[3;35mRunning #{effect.inspect}\e[0m"
             effect.value
           end
         end
-      ensure
-        puts "\e[3m AFTER FLUSH #{self} \e[0m"
       end
     end
 
