@@ -128,7 +128,9 @@ module S
   end
 
   class Computed < Reactive
-    Disposed = Data.define
+    Disposed = Data.define do
+      def self.inspect = "🗑️"
+    end
 
     def initialize(&compute)
       super()

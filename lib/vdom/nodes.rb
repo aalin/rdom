@@ -546,12 +546,14 @@ module VDOM
 
         def wrap_reactive_root(handler, root = S::Root.current)
           lambda do |payload|
-            root.batch do
-              S.untrack do
-                if handler.arity.zero?
-                  handler.call
-                else
-                  handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
+            async do
+              root.batch do
+                S.untrack do
+                  if handler.arity.zero?
+                    handler.call
+                  else
+                    handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
+                  end
                 end
               end
             end
