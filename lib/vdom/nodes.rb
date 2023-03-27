@@ -499,13 +499,13 @@ module VDOM
         end
 
         def update_reactive(parent_id, ref_id, name, signal, &)
-          S.root do
-            S.effect do
-              update_static(parent_id, ref_id, name, signal.value)
-            end
-
-            yield
+          sub = signal.subscribe do |value|
+            update_static(parent_id, ref_id, name, value)
           end
+
+          yield
+        ensure
+          sub.stop
         end
 
         def update_dynamic(parent_id, ref_id, name, signal, &)
@@ -639,9 +639,10 @@ module VDOM
 
     class VReactive < Base
       def run(signal)
-        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
-          S.root do
-            signal.subscribe do |value|
+        S.root do
+          VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
+            sub = signal.subscribe do |value|
+              puts "Updating reactive #{value.inspect}"
               vnode.resume(Descriptor.normalize_children(value))
             end
 
@@ -650,6 +651,8 @@ module VDOM
                 raise "Signal changed!"
               end
             end
+          ensure
+            sub.stop
           end
         end
       end

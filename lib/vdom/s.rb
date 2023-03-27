@@ -34,6 +34,8 @@ module S
 
       def <=>(other) =
         to_i <=> other.to_i
+      def to_s =
+        name[/\w+$/]
     end
 
     Clean = State.new(0, 32)
@@ -103,18 +105,21 @@ module S
 
     def value=(value)
       return if @value == value
-
+      puts "#{self.inspect} updated value from #{@value.inspect} to #{value.inspect}"
       @value = value
       mark!(States::Clean)
 
       Root.current!.batch do
-        puts "\e[1;31m#{self.inspect} notifying States::Dirty\e[0m"
         notify(States::Dirty)
       end
     end
 
-    def notify(state) =
-      @condition.signal(state)
+    def notify(state)
+      unless @condition.empty?
+        puts "\e[1;31m#{self.inspect} notifying #{state}\e[0m"
+        @condition.signal(state)
+      end
+    end
 
     def mark!(state)
       unless @state == state
@@ -169,6 +174,7 @@ module S
       @sources[source] ||=
         @barrier.async do |subtask|
           while state = source.wait
+            puts "#{self.inspect} got #{state}"
             if @state < state
               enqueue_effect if clean?
               mark!(state)
@@ -223,8 +229,10 @@ module S
 
       S.batch do
         Utils.with_fiber_local(CURRENT_KEY, self) do
-          @sources.clear
-          Reactive.track(&@compute)
+          Reactive.track do
+            @sources.clear
+            @compute.call
+          end
         end
       end
     end
@@ -255,6 +263,11 @@ module S
       self.value = call
     end
 
+    def value
+      puts "Getting #{self.inspect}.value"
+      super
+    end
+
     def enqueue_effect =
       Root.current!.enqueue(self)
   end
@@ -262,6 +275,7 @@ module S
   class Batch
     def initialize
       @queue = Async::Queue.new
+      @level = 0
     end
 
     def enqueue(effect)
@@ -269,23 +283,47 @@ module S
       @queue.enqueue(effect)
     end
 
-    def run(&)
-      yield self
+    def run(task: Async::Task.current, &)
+      @level += 1
+      task.with_timeout(0.1) do
+        yield self
+      rescue Async::Timeout
+        Console.logger.error(self, e)
+      end
     ensure
-      puts "\e[1;3m FLUSHING #{self} \e[0m"
-      flush!
-      puts "\e[3m AFTER FLUSH #{self} \e[0m"
+      begin
+        flush! if @level == 1
+      ensure
+        @level -= 1
+      end
     end
 
-    def flush! =
+    def flush!
+      # return if @queue.empty?
       Reactive.untrack do
-        until @queue.empty?
-          @queue.dequeue.value
+        puts "\e[1;3m FLUSHING #{self} \e[0m"
+
+        catch_error do
+          until @queue.empty?
+            effect = @queue.dequeue
+            puts "\e[3;35mRunning #{effect.inspect}\e[0m"
+            effect.value
+          end
         end
-      rescue => e
-        Console.logger.error(self, e)
-        raise
+      ensure
+        puts "\e[3m AFTER FLUSH #{self} \e[0m"
       end
+    end
+
+    def catch_error(error = nil)
+      yield
+    rescue => e
+      error ||= e
+      Console.logger.error(self, e)
+      retry
+    ensure
+      raise error if error
+    end
   end
 
   class Cycles
@@ -313,7 +351,7 @@ module S
     def self.current =
       Fiber[CURRENT_KEY]
     def self.current! =
-      current or raise("No root!")
+      current || raise("No root!")
 
     def self.run(&) =
       Async do |task|
@@ -326,23 +364,15 @@ module S
 
     def initialize
       @cycles = Cycles.new
+      @batch = Batch.new
     end
 
     def enqueue(effect) =
       batch { _1.enqueue(effect) }
 
     def batch(&)
-      if @batch
-        @cycles.detect do
-          yield @batch
-        end
-      else
-        Batch.new.run do |batch|
-          @batch = batch
-          yield @batch
-        ensure
-          @batch = nil
-        end
+      @cycles.detect do
+        @batch.run(&)
       end
     end
   end
@@ -365,6 +395,23 @@ module S
 end
 
 if __FILE__ == $0
+  S.root do
+    a = S.signal(0)
+    i = 0
+
+    S.effect do
+      puts "Running effect"
+      # Prevent test suite from spinning if limit is not hit
+      if (i += 1) > 200
+        raise "test failed"
+      end
+      a.value
+      a.value = Float::NAN
+    end
+  end
+
+  exit
+
   S.root do
     a = S.signal(0)
     b = S.signal(0)
