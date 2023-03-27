@@ -35,7 +35,7 @@
   append = -> do
     break if value.value.empty?
     items.value = [*items.value, Item[value.value, rand]]
-    input.value = input.value = ""
+    input.value = value.value = ""
   end
 
   sort = -> { items.value = items.value.sort_by(&:value) }
