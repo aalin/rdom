@@ -54,8 +54,8 @@ module VDOM
 
     class ComponentModule < Module
       using CSSUnits::Refinements
-      # using S::Refinements
-      using Reactively::Refinements
+      using S::Refinements
+      # using Reactively::Refinements
 
       def initialize(code, path) =
         instance_eval(code, path, 1)

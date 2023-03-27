@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "async"
 require "async/barrier"
 require "async/condition"
@@ -5,468 +7,469 @@ require "async/notification"
 require "async/queue"
 require "async/semaphore"
 
-module VDOM
-  module S
-    module Utils
-      def self.with_fiber_local(name, value)
-        prev, Fiber[name] = Fiber[name], value
-        yield value
-      ensure
-        Fiber[name] = prev
+module S
+  class CycleDetectedError < StandardError
+  end
+
+  module Utils
+    def self.with_fiber_local(name, value)
+      prev, Fiber[name] = Fiber[name], value
+      yield value
+    ensure
+      Fiber[name] = prev
+    end
+  end
+
+  module States
+    class State < Module
+      include Comparable
+      attr_reader :to_i
+      attr_reader :sgr
+
+      def initialize(value, sgr)
+        @to_i = value
+        @sgr = sgr
+        freeze
       end
+
+      def <=>(other) =
+        to_i <=> other.to_i
     end
 
-    class Sources
-      Source = Data.define(:source, :version, :task) do
-        def version_changed? =
-          version != source.version
-      end
+    Clean = State.new(0, 32)
+    Check = State.new(1, 33)
+    Dirty = State.new(2, 31)
+  end
 
-      def initialize(task: Async::Task.current)
-        @sources = {}
-        @barrier = Async::Barrier.new(parent: task)
-        @condition = Async::Condition.new
-      end
+  class Reactive
+    CURRENT_KEY = :S_Reactive_current
+    TRACKING_KEY = :S_Reactive_tracking?
 
-      def add(source) =
-        @sources[source] ||=
-          Source.new(
-            source,
-            source.version,
-            @barrier.async do
-              # puts "\e[2;32mSubscribing #{Computation.current.inspect} to #{source.inspect}\e[0m"
-              @condition.signal(source.wait)
-              @barrier.stop
-            end
-          )
-      def wait =
-        @condition.wait
-      def empty? =
-        @condition.empty?
-      def changed? =
-        @sources.values.any?(&:version_changed?)
+    def self.tracking? =
+      Fiber[TRACKING_KEY] != false
+    def self.track(tracking = true, &) =
+      Utils.with_fiber_local(TRACKING_KEY, tracking, &)
+    def self.untrack(&) =
+      track(false, &)
 
-      def clear
-        @barrier.stop
-      ensure
-        @sources.clear
-      end
+    def self.current = Fiber[CURRENT_KEY]
+
+    def initialize
+      @condition = Async::Condition.new
     end
 
-    class Reactive
-      CacheClean = 0
-      CacheCheck = 1
-      CacheDirty = 2
+    def subscribe(&)
+      S.effect do
+        value = self.value
 
-      def self.tracking? =
-        Fiber[:tracking?] != false
-      def self.track(&) =
-        Utils.with_fiber_local(:tracking?, true, &)
-      def self.untrack(&) =
-        Utils.with_fiber_local(:tracking?, false, &)
-      def self.current_reaction =
-        (Fiber[:current_reaction] if tracking?)
-
-      def initialize
-        @root = Root.current!
-        @condition = Async::Condition.new
-        @version = -1
-      end
-
-      attr_reader :version
-
-      def wait =
-        @condition.wait
-      def peek =
-        @value
-
-      def value
-        Reactive.current_reaction&.add_source(self)
-        update
-        @value
-      end
-
-      private
-
-      attr_reader :root
-
-      def notify(state) =
-        @condition.signal(state)
-      def update =
-        nil
-    end
-
-    class Signal < Reactive
-      def initialize(value)
-        super()
-        @version = -1
-        @value = value
-        @state = CacheClean
-      end
-
-      def value=(new_value)
-        return if @value == new_value
-
-        @value = new_value
-        @version += 1
-
-        root.increment_version!
-
-        root.batch do
-          notify(CacheDirty)
+        Reactive.untrack do
+          yield value
         end
       end
-
-      def inspect =
-        "#<#{self.class.name}@#@version value=#{@value.inspect}>"
     end
 
-    class Computation < Reactive
-      def inspect = [
-        "#{self.class.name}@#@version",
-        "value=#{@value.inspect}",
-        @compute.source_location.join(":")
-      ].join(" ").prepend("#<").concat(">")
+    def inspect =
+      "#<#{self.class.name} value=#{@value.inspect} #{@state}>"
+    def to_s =
+      @value.to_s
 
-      def initialize(task: Async::Task.current, &compute)
-        super()
-        @version = -1
-        @root_version = root.version.pred
-        @compute = compute
-        @sources = Sources.new
-        @state = CacheDirty
-        @semaphore = Async::Semaphore.new
+    def clean? =
+      @state == States::Clean
+    def check? =
+      @state == States::Check
+    def dirty? =
+      @state == States::Dirty
 
-        @task = task.async do
-          loop do
-            if state = @sources.wait
-              @semaphore.acquire do
-                if @state < state
-                  enqueue_effect
-                  notify(CacheCheck)
-                  @state = state
-                end
-              end
+    def wait =
+      @condition.wait
+
+    def peek
+      update
+      @value
+    end
+
+    def value
+      if Reactive.tracking?
+        Reactive.current&.add_source(self)
+      end
+
+      peek
+    end
+
+    protected
+
+    def update
+    end
+
+    def value=(value)
+      return if @value == value
+
+      @value = value
+      mark!(States::Clean)
+
+      Root.current!.batch do
+        puts "\e[1;31m#{self.inspect} notifying States::Dirty\e[0m"
+        notify(States::Dirty)
+      end
+    end
+
+    def notify(state) =
+      @condition.signal(state)
+
+    def mark!(state)
+      unless @state == state
+        puts "\e[#{state.sgr}m#{self.inspect} #{state}\e[0m"
+        @state = state
+      end
+    end
+  end
+
+  class Signal < Reactive
+    def initialize(value)
+      super()
+      @state = States::Clean
+      @value = value
+    end
+
+    public :value=
+  end
+
+  class Computed < Reactive
+    Disposed = Data.define
+
+    def initialize(&compute)
+      super()
+      @compute = compute
+      @sources = {}
+      @state = States::Dirty
+      @barrier = Async::Barrier.new
+    end
+
+    def inspect =
+      "#<#{self.class.name} #{@compute.source_location.join(":")} value=#{@value.inspect} #@state>"
+
+    def stop
+      cleanup!
+
+      @value = Disposed
+      mark!(States::Clean)
+      @barrier.stop
+      @sources.clear
+    end
+
+    def disposed? =
+      @value == Disposed
+
+    def add_source(source)
+      if source == self
+        raise CycleDetectedError
+      end
+
+      puts "\e[36mSubscribing #{self.inspect} to #{source.inspect}\e[0m"
+      @sources[source] ||=
+        @barrier.async do |subtask|
+          while state = source.wait
+            if @state < state
+              enqueue_effect if clean?
+              mark!(state)
+              notify(States::Check)
             end
           end
         rescue => e
           Console.logger.error(self, e)
         ensure
-          cleanup
+          @sources.delete_if { _1 == source && _2 == subtask }
         end
+    end
 
-        update if effect?
+    protected
+
+    def update
+      return if disposed?
+      return if clean?
+
+      wait_for_sources if check?
+
+      return unless dirty?
+
+      old_sources = @sources.values.to_a
+
+      begin
+        cleanup!
+        self.value = call
+      rescue => e
+        raise e
+      ensure
+        @state = States::Clean
       end
 
-      def stop =
-        @task.stop
+      old_sources.each(&:stop)
+    end
 
-      def add_source(source) =
-        @sources.add(source)
+    def wait_for_sources(barrier: Async::Barrier.new)
+      return if @sources.empty?
+      puts "#{self.inspect} waiting for #{@sources.keys.inspect}"
 
-      private
-
-      def effect? =
-        false
-      def enqueue_effect =
+      @sources.each_key do |source|
+        source.peek
+        break if dirty?
+      rescue
         nil
-      def cleanup =
-        @sources.clear
-
-      def update
-        return if @state == CacheClean
-
-        return if up_to_date?
-        return unless sources_changed?
-
-        @semaphore.acquire do
-          previous_value = @value
-
-          cleanup
-
-          Utils.with_fiber_local(:current_reaction, self) do
-            @value = @compute.call
-          end
-
-          unless previous_value == @value
-            @version += 1
-            notify(CacheDirty)
-          end
-
-          @state = CacheClean
-        end
       end
+    end
 
-      def up_to_date?
-        root_version = root.version
+    def call
+      return if disposed?
 
-        if @root_version == root_version
-          true
-        else
-          @root_version = root_version
-          false
-        end
-      end
-
-      def sources_changed?
-        if @version > 0
-          @sources.changed?
-        else
-          true
+      S.batch do
+        Utils.with_fiber_local(CURRENT_KEY, self) do
+          @sources.clear
+          Reactive.track(&@compute)
         end
       end
     end
 
-    class Effect < Computation
-      def initialize(...)
-        @cleanups = []
-        super(...)
-      end
+    def cleanup!
+      if @value in Proc => value
+        @value = nil
 
-      def on_cleanup(&block) =
-        @cleanups.push(block)
-
-      private
-
-      def effect? =
-        true
-
-      def enqueue_effect
-        return unless @state == CacheClean
-        Root.current!.enqueue(self)
-      end
-
-      def cleanup
-        super
-
-        Reactive.untrack do
-          while cleanup = @cleanups.shift
-            cleanup.call
+        S.batch do
+          Reactive.untrack do
+            value.call
           end
+        rescue => e
+          Console.logger.error(self, e)
+          stop
+          raise
+        end
+      end
+    end
+
+    def enqueue_effect =
+      nil
+  end
+
+  class Effect < Computed
+    def initialize
+      super
+      self.value = call
+    end
+
+    def enqueue_effect =
+      Root.current!.enqueue(self)
+  end
+
+  class Batch
+    def initialize
+      @queue = Async::Queue.new
+    end
+
+    def enqueue(effect)
+      puts "\e[34mENQUEUE: #{effect.inspect}\e[0m"
+      @queue.enqueue(effect)
+    end
+
+    def run(&)
+      yield self
+    ensure
+      puts "\e[1;3m FLUSHING #{self} \e[0m"
+      flush!
+      puts "\e[3m AFTER FLUSH #{self} \e[0m"
+    end
+
+    def flush! =
+      Reactive.untrack do
+        until @queue.empty?
+          @queue.dequeue.value
         end
       rescue => e
         Console.logger.error(self, e)
+        raise
       end
-    end
-
-    class Root
-      CURRENT_KEY = :"VDOM::S::Root.current"
-      NoReactiveRootError = Class.new(StandardError)
-
-      def self.current =
-        Fiber[CURRENT_KEY]
-      def self.current! =
-        current || raise(NoReactiveRootError, "There is no reactive root")
-
-      def self.run(task: Async::Task.current, &)
-        root = new
-
-        root.async do
-          yield
-        rescue => e
-          Console.logger.error(self, e)
-        ensure
-          root.stop
-        end
-
-        root
-      end
-
-      def initialize(parent: self.class.current, task: Async::Task.current)
-        @parent = parent
-        @queue = Async::Queue.new
-        @version = 0
-        @batching = false
-        @barrier = Async::Barrier.new(parent: task)
-      end
-
-      attr_reader :version
-
-      def increment_version!
-        @version += 1
-      end
-
-      def async(&) =
-        @barrier.async do
-          Fiber[CURRENT_KEY] = self
-          Fiber[:current_reaction] = nil
-          yield
-        end
-
-      def wait = @barrier.wait
-      def stop = @barrier.stop
-
-      def batch(&)
-        if @batching
-          yield and return
-        end
-
-        @batching = true
-
-        begin
-          yield
-        rescue
-          raise
-        ensure
-          flush!
-          @batching = false
-        end
-      end
-
-      def enqueue(effect)
-        @queue.enqueue(effect)
-      end
-
-      def flush!
-        puts  "\e[3m FLUSH #{@queue.size} \e[0m"
-
-        @queue.size.times do
-          @queue.dequeue.value
-        end
-      end
-    end
-
-    module Helpers
-      def root(&) = Root.run(&)
-
-      def signal(value) = Signal.new(value)
-      def computed(&) = Computation.new(&)
-      def effect(&) = Effect.new(&)
-
-      def batch(&) = Root.current!.batch(&)
-
-      def track(&) = Reactive.track(&)
-      def untrack(&) = Reactive.untrack(&)
-      def tracking? = Reactive.tracking?
-
-      def on_cleanup(&)
-        Reactive.current_reaction => Effect => effect
-        effect.on_cleanup(&)
-      end
-    end
-
-    module Refinements
-      refine Kernel do
-        import_methods Helpers
-      end
-    end
-
-    extend Helpers
   end
+
+  class Cycles
+    LIMIT = 20
+
+    def initialize =
+      @count = 0
+
+    def detect(&)
+      @count += 1
+
+      if @count > LIMIT
+        raise CycleDetectedError
+      end
+
+      yield
+    ensure
+      @count -=1
+    end
+  end
+
+  class Root
+    CURRENT_KEY = :S_Root_current
+
+    def self.current =
+      Fiber[CURRENT_KEY]
+    def self.current! =
+      current or raise("No root!")
+
+    def self.run(&) =
+      Async do |task|
+        yield Fiber[CURRENT_KEY] = new
+      rescue => e
+        Console.logger.error(self, e)
+      ensure
+        task.stop
+      end
+
+    def initialize
+      @cycles = Cycles.new
+    end
+
+    def enqueue(effect) =
+      batch { _1.enqueue(effect) }
+
+    def batch(&)
+      if @batch
+        @cycles.detect do
+          yield @batch
+        end
+      else
+        Batch.new.run do |batch|
+          @batch = batch
+          yield @batch
+        ensure
+          @batch = nil
+        end
+      end
+    end
+  end
+
+  module Helpers
+    def root(&) = Root.run(&)
+    def batch(&) = Root.current!.batch(&)
+    def signal(value) = Signal.new(value)
+    def computed(&) = Computed.new(&)
+    def effect(&) = Effect.new(&)
+  end
+
+  module Refinements
+    refine Kernel do
+      import_methods Helpers
+    end
+  end
+
+  extend Helpers
 end
 
-if $0 == __FILE__
-  def title(str, *attrs)
-    puts "\e[3;#{attrs.join(":")}m #{str} \e[0m"
-  end
+if __FILE__ == $0
+  S.root do
+    a = S.signal(0)
+    b = S.signal(0)
 
-  S = VDOM::S
+    c = S.computed do
+      p(a.value + b.value)
+    end
 
-  Async do
-    title "******************", 35
-    title "*** FIRST TEST ***", 35
-    title "******************", 35
-
-    S.root do
-      s1 = S.signal(0)
-      s2 = S.signal(0)
-      s3 = S.signal(0)
-
-      c = S.computed do
-        if s1.value > 0
-          p(s1: s1.value, s3: s3.value)
-        else
-          p(s3: s3.value, s2: s2.value)
-        end
+    d = S.computed do
+      if a.value == 2
+        p(b2: b.value * 2)
+      else
+        p(a2: a.value * 2)
       end
+    end
 
-      e = S.effect do
-        puts "c.value: #{c.value.inspect}"
-      end
+    e = S.effect do
+      p(e: c.value)
+    end
 
-      sleep 0.1
-      s1.value += 1
-      sleep 0.1
-      s2.value += 1
-      sleep 0.1
-      s3.value += 1
-      sleep 0.1
-      s1.value += 1
-      sleep 0.1
-      s2.value += 1
-      sleep 0.1
-      s3.value += 1
-      sleep 0.1
-      s1.value += 1
-      sleep 0.1
-      s2.value += 1
-      sleep 0.1
-      s3.value += 1
+    f = S.effect do
+      p(f: d.value)
+    end
 
-      c.stop
-      e.stop
-    end.wait
+    puts
+    sleep 0.1
+    puts
+    puts "**** INCREMENTING A"
+    a.value += 1
+    puts "**** INCREMENTED A"
+    sleep 0.1
+    puts
 
-    title "*******************", 35
-    title "*** SECOND TEST ***", 35
-    title "*******************", 35
+    puts "**** INCREMENTING B"
+    b.value += 1
+    puts "**** INCREMENTED B"
+    sleep 0.1
+    puts
 
-    S.root do
-      a = S.signal(0)
-      b = S.signal(0)
+    puts "**** INCREMENTING A"
+    a.value += 1
+    puts "**** INCREMENTED A"
+    sleep 0.1
+    puts
 
-      c = S.computed do
-        v = a.value + b.value
-        p(c: v)
-        v
-      end
+    puts "**** INCREMENTING B"
+    b.value += 1
+    puts "**** INCREMENTED B"
+    sleep 0.1
+    puts
 
-      d = S.computed do
-        v = b.value * 2
-        p(d: v)
-        v
-      end
+    puts "**** INCREMENTING B"
+    b.value += 1
+    puts "**** INCREMENTED B"
+    sleep 0.1
+    puts
 
-      e = S.effect do
-        v = c.value + d.value
-        p(e: v)
-      end
-
-      f = S.effect do
-        p(f: { a: a.value, b: b.value })
-
-        S.on_cleanup do
-          puts "f on cleanup"
-        end
-      end
-
-      sleep 0.1
-
-      title("Updating a", 33)
+    puts "**** INCREMENTING A AND B"
+    S.batch do
       a.value += 1
-
-      sleep 0.1
-
-      title("Updating a", 33)
-      a.value += 1
-
-      sleep 0.1
-
-      title("Updating b", 33)
       b.value += 1
+    end
+    puts "**** INCREMENTED A AND B"
+    sleep 0.1
+    puts
 
-      sleep 0.1
+    puts "**** INCREMENTING B"
+    b.value += 1
+    puts "**** INCREMENTED B"
+    sleep 0.1
+    puts
 
-      title("Updating a and b", 33)
-      S.batch do
-        a.value += 1
-        b.value += 1
-      end
+    Async::Task.current.stop
+  end
 
-      sleep 0.1
-    end.wait
-
-    S.root do
+  def assert_equal(a, b)
+    unless a == b
+      raise "#{a.inspect} does not equal #{b.inspect}"
     end
   end
+
+  S.root do
+    a = S.signal("a")
+    called_times = 0
+
+    b =
+      S.computed do
+        a.value
+        "foo"
+      end
+
+    c = S.computed do
+      puts "CALCULATING C"
+      called_times += 1
+      b.value
+    end
+
+    assert_equal("foo", c.value)
+    sleep 0.1
+    assert_equal(1, called_times)
+
+    a.value = "aa"
+    sleep 0.1
+    assert_equal("foo", c.value)
+    assert_equal(1, called_times)
+  end
 end
+

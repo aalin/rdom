@@ -641,8 +641,8 @@ module VDOM
       def run(signal)
         VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
           S.root do
-            S.effect do
-              vnode.resume(Descriptor.normalize_children(signal.value))
+            signal.subscribe do |value|
+              vnode.resume(Descriptor.normalize_children(value))
             end
 
             receive do |new_signal|
