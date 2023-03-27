@@ -533,16 +533,26 @@ module VDOM
         def run(parent_id, ref_id, name, handler)
           id = SecureRandom.alphanumeric(32)
 
-          callbacks.store(id, handler)
+          callbacks.store(id, wrap_reactive_root(handler))
 
           patch(Patches::SetHandler[parent_id, ref_id, name, id])
 
           receive do |handler|
-            callbacks.store(id, handler)
+            callbacks.store(id, wrap_reactive_root(handler))
           end
         ensure
           callbacks.delete(id)
           patch(Patches::RemoveHandler[parent_id, ref_id, name, id])
+        end
+
+        def wrap_reactive_root(handler, root = S::Root.current)
+          ->(*args, **kwargs, &block) do
+            root.batch do
+              S.untrack do
+                handler.call(*args, **kwargs, &block)
+              end
+            end
+          end
         end
       end
 
@@ -639,8 +649,7 @@ module VDOM
 
     class VReactive < Base
       def run(signal)
-        S.root do
-          VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
+          VAny.run(Descriptor.normalize_children(signal.peek)) do |vnode|
             sub = signal.subscribe do |value|
               puts "Updating reactive #{value.inspect}"
               vnode.resume(Descriptor.normalize_children(value))
@@ -655,7 +664,6 @@ module VDOM
             sub.stop
           end
         end
-      end
     end
 
     class VReactively < Base

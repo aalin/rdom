@@ -21,26 +21,14 @@ module S
   end
 
   module States
-    class State < Module
+    State = Data.define(:to_i, :to_s) do
       include Comparable
-      attr_reader :to_i
-      attr_reader :sgr
-
-      def initialize(value, sgr)
-        @to_i = value
-        @sgr = sgr
-        freeze
-      end
-
-      def <=>(other) =
-        to_i <=> other.to_i
-      def to_s =
-        name[/\w+$/]
+      def <=>(other) = to_i <=> other.to_i
     end
 
-    Clean = State.new(0, 32)
-    Check = State.new(1, 33)
-    Dirty = State.new(2, 31)
+    Clean = State[0, "🟢"]
+    Check = State[1, "🟡"]
+    Dirty = State[2, "🔴"]
   end
 
   class Reactive
@@ -123,7 +111,7 @@ module S
 
     def mark!(state)
       unless @state == state
-        puts "\e[#{state.sgr}m#{self.inspect} #{state}\e[0m"
+        puts "#{self.inspect} changed to #{state}"
         @state = state
       end
     end
@@ -176,7 +164,7 @@ module S
           while state = source.wait
             puts "#{self.inspect} got #{state}"
             if @state < state
-              enqueue_effect if clean?
+              enqueue_effect # if clean?
               mark!(state)
               notify(States::Check)
             end
@@ -287,7 +275,7 @@ module S
       @level += 1
       task.with_timeout(0.1) do
         yield self
-      rescue Async::Timeout
+      rescue => e
         Console.logger.error(self, e)
       end
     ensure
@@ -372,7 +360,9 @@ module S
 
     def batch(&)
       @cycles.detect do
-        @batch.run(&)
+        Utils.with_fiber_local(CURRENT_KEY, self) do
+          @batch.run(&)
+        end
       end
     end
   end
@@ -380,9 +370,14 @@ module S
   module Helpers
     def root(&) = Root.run(&)
     def batch(&) = Root.current!.batch(&)
+
     def signal(value) = Signal.new(value)
     def computed(&) = Computed.new(&)
     def effect(&) = Effect.new(&)
+
+    def tracking? = Reactive.tracking?
+    def track(&) = Reactive.track(&)
+    def untrack(&) = Reactive.untrack(&)
   end
 
   module Refinements
