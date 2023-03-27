@@ -218,6 +218,7 @@ module S
       S.batch do
         Utils.with_fiber_local(CURRENT_KEY, self) do
           Reactive.track do
+            mark!(States::Clean)
             @sources.clear
             @compute.call
           end
@@ -287,7 +288,8 @@ module S
     end
 
     def flush!
-      # return if @queue.empty?
+      return if @queue.empty?
+
       Reactive.untrack do
         puts "\e[1;3m FLUSHING #{self} \e[0m"
 

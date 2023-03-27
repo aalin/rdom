@@ -97,10 +97,8 @@ module VDOM
         end
       end
 
-      def task =
-        @task || @parent&.task || Async::Task.current
       def async(&) =
-        task.async(&)
+        Async::Task.current.async(&)
       def hierarchy =
         [*parent.hierarchy, self]
       def running? =
@@ -171,11 +169,12 @@ module VDOM
         patch(Patches::Event[event, payload])
 
       def run(descriptor)
+        instance = descriptor.type.allocate
+        # Define @props before calling initialize,
+        # so we can use self.props inside initialize.
+        instance.instance_variable_set(:@props, descriptor.props)
+
         S.root do
-          instance = descriptor.type.allocate
-          # Define @props before calling initialize,
-          # so we can use self.props inside initialize.
-          instance.instance_variable_set(:@props, descriptor.props)
           instance.send(:initialize, **descriptor.props)
 
           yield_self do |vcomponent|
@@ -546,13 +545,25 @@ module VDOM
         end
 
         def wrap_reactive_root(handler, root = S::Root.current)
-          ->(*args, **kwargs, &block) do
+          lambda do |payload|
             root.batch do
               S.untrack do
-                handler.call(*args, **kwargs, &block)
+                if handler.arity.zero?
+                  handler.call
+                else
+                  handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
+                end
               end
             end
           end
+        end
+
+        def extract_kwargs(parameters)
+          parameters.map do |param|
+            if param in [:key | :keyreq, name]
+              name
+            end
+          end.compact
         end
       end
 
@@ -653,6 +664,7 @@ module VDOM
             sub = signal.subscribe do |value|
               puts "Updating reactive #{value.inspect}"
               vnode.resume(Descriptor.normalize_children(value))
+              puts "Updated reactive #{value.inspect}"
             end
 
             receive do |new_signal|
@@ -760,30 +772,14 @@ module VDOM
         @patches.enqueue(patch)
       def take =
         @patches.dequeue
+      def handle_callback(id, payload) =
+        @callbacks.fetch(id).call(payload)
 
       def mount_dom_node(id)
         patch(Patches::InsertBefore[nil, id, nil])
         yield
       ensure
         patch(Patches::RemoveChild[nil, id])
-      end
-
-      def handle_callback(id, payload)
-        handler = @callbacks.fetch(id)
-
-        if handler.arity.zero?
-          handler.call
-        else
-          handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
-        end
-      end
-
-      def extract_kwargs(parameters)
-        parameters.map do |param|
-          if param in [:key | :keyreq, name]
-            name
-          end
-        end.compact
       end
 
       RootElement = CustomElement[
