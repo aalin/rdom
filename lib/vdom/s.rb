@@ -92,13 +92,13 @@ module S
     end
 
     def value=(value)
-      return if @value == value
-      puts "#{self.inspect} updated value from #{@value.inspect} to #{value.inspect}"
-      @value = value
-      mark!(States::Clean)
-
       Root.current!.batch do
-        notify(States::Dirty)
+        mark!(States::Clean)
+        unless @value == value
+          puts "#{self.inspect} updated value from #{@value.inspect} to #{value.inspect}"
+          @value = value
+          notify(States::Dirty)
+        end
       end
     end
 
@@ -129,7 +129,7 @@ module S
 
   class Computed < Reactive
     Disposed = Data.define do
-      def self.inspect = "🗑️"
+      def self.inspect = "☠️ "
     end
 
     def initialize(&compute)
@@ -196,8 +196,6 @@ module S
       rescue => e
         raise e
       ensure
-        mark!(States::Clean)
-
         old_sources.each do |source, listener|
           listener.stop
         end
