@@ -2,14 +2,22 @@
   def initialize(**)
     @b = {}
     @o = {}
+    @x = {}
   end
 
   def mount
     loop do
       GC.stat(@b)
       ObjectSpace.count_objects(@o)
+      count_reactives(@x)
       rerender!
       sleep 1
+    end
+  end
+
+  def count_reactives(h = {})
+    [S::Signal, S::Computed, S::Effect].each do |klass|
+      h[klass.name] = ObjectSpace.each_object(klass)
     end
   end
 
@@ -22,6 +30,11 @@
         %dd= v
   %dl
     = @o.map do |k, v|
+      .entry[k]
+        %dt= k
+        %dd= v
+  %dl
+    = @x.map do |k, v|
       .entry[k]
         %dt= k
         %dd= v
