@@ -53,7 +53,12 @@ Example:
 
     bin/transform app/List.haml
 
-## Limitations
+## Features and limitations
+
+### Reactive rendering
+
+This repository contains a reactive signals library inspired
+by SolidJS, Preact Signals and Reactively.
 
 ### Only streaming
 
@@ -68,7 +73,7 @@ If the connection drops, all state is lost.
 For an attempt at something more reliable, check out
 [Mayu Live](https://github.com/mayu-live/framework).
 
-### Fragments don't work etc
+### Custom elements
 
 All static DOM trees are extracted into custom elements, so if you write:
 
