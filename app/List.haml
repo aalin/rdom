@@ -23,7 +23,7 @@
   end
 
   add_disabled = computed do
-    puts "\e[3;33mCalculating add_disabled\e[0m"
+    puts "\e[3;33mCalculating add_disabled #{input.value.inspect}\e[0m"
     input.value.empty?
   end
 
