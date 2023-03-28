@@ -44,7 +44,10 @@ module S
     def self.untrack(&) =
       track(false, &)
 
-    def self.current = Fiber[CURRENT_KEY]
+    def self.current =
+      Fiber[CURRENT_KEY]
+    def self.current_tracking =
+      (current if tracking?)
 
     def initialize =
       @condition = Async::Condition.new
@@ -74,17 +77,14 @@ module S
     def wait =
       @condition.wait
 
+    def value
+      Reactive.current_tracking&.add_source(self)
+      peek
+    end
+
     def peek
       update
       @value
-    end
-
-    def value
-      if Reactive.tracking?
-        Reactive.current&.add_source(self)
-      end
-
-      peek
     end
 
     protected
@@ -127,12 +127,12 @@ module S
       def self.inspect = "☠️ "
     end
 
-    def initialize(&compute)
+    def initialize(task: Async::Task.current, &compute)
       super()
       @compute = compute
       @sources = {}
       @state = States::Dirty
-      @barrier = Async::Barrier.new
+      @barrier = Async::Barrier.new(parent: task)
     end
 
     def inspect =
@@ -140,7 +140,7 @@ module S
 
     def stop
       cleanup!
-
+    ensure
       @compute = @value = Disposed
       mark!(States::Clean)
       @barrier.stop
@@ -150,17 +150,14 @@ module S
     def disposed? =
       @value == Disposed
 
-    def add_source(source)
-      if source == self
-        raise CycleDetectedError
+    def add_source(source) =
+      unless self == source
+        @sources[source] ||= create_listener(source)
       end
-
-      @sources[source] ||= create_listener(source)
-    end
 
     protected
 
-    def create_listener(source)
+    def create_listener(source) =
       @barrier.async do |subtask|
         while state = source.wait
           next unless @state < state
@@ -173,7 +170,6 @@ module S
       ensure
         @sources.delete_if { _1 == source && _2 == subtask }
       end
-    end
 
     def update
       return if disposed?
@@ -186,28 +182,23 @@ module S
         return
       end
 
-      old_sources = @sources.dup
+      old_listeners = @sources.values
 
       begin
         cleanup!
         self.value = call
-      rescue => e
-        raise e
       ensure
-        old_sources.each do |source, listener|
-          listener.stop
-        end
+        old_listeners.each(&:stop)
       end
     end
 
-    def wait_for_sources
+    def wait_for_sources =
       @sources.each_key do |source|
         source.peek
         break if dirty?
       rescue
         nil
       end
-    end
 
     def call
       return if disposed?
@@ -252,73 +243,8 @@ module S
       Root.current!.enqueue(self)
   end
 
-  class Batch
-    def initialize
-      @queue = Async::Queue.new
-      @level = 0
-    end
-
-    def enqueue(effect) =
-      @queue.enqueue(effect)
-
-    def run(task: Async::Task.current, &)
-      @level += 1
-      task.with_timeout(0.1) do
-        yield self
-      rescue => e
-        Console.logger.error(self, e)
-      end
-    ensure
-      begin
-        flush! if @level == 1
-      ensure
-        @level -= 1
-      end
-    end
-
-    def flush!
-      return if @queue.empty?
-
-      Reactive.untrack do
-        catch_error do
-          until @queue.empty?
-            @queue.dequeue.peek
-          end
-        end
-      end
-    end
-
-    def catch_error(error = nil)
-      yield
-    rescue => e
-      error ||= e
-      Console.logger.error(self, e)
-      retry
-    ensure
-      raise error if error
-    end
-  end
-
-  class CycleDetector
-    LIMIT = 20
-
-    def initialize =
-      @count = 0
-
-    def detect(&)
-      @count += 1
-
-      if @count > LIMIT
-        raise CycleDetectedError
-      end
-
-      yield
-    ensure
-      @count -=1
-    end
-  end
-
   class Root
+    CYCLE_LIMIT = 50
     CURRENT_KEY = :S_Root_current
 
     def self.current =
@@ -328,27 +254,66 @@ module S
 
     def self.run(&) =
       Async do |task|
-        yield Fiber[CURRENT_KEY] = new
-      rescue => e
-        Console.logger.error(self, e)
-      ensure
-        task.stop
-      end
+        Fiber[CURRENT_KEY] = root = new
 
-    def initialize
-      @cycles = CycleDetector.new
-      @batch = Batch.new
-    end
-
-    def enqueue(effect) =
-      batch { _1.enqueue(effect) }
-
-    def batch(&)
-      @cycles.detect do
-        Utils.with_fiber_local(CURRENT_KEY, self) do
-          @batch.run(&)
+        begin
+          yield root
+        ensure
+          root.stop
+          task.stop
         end
       end
+
+    def initialize(task: Async::Task.current)
+      @barrier = Async::Barrier.new(parent: task)
+      @queue = Async::Queue.new(parent: @barrier)
+      @level = 0
+    end
+
+    def stop =
+      @barrier.stop
+
+    def enqueue(effect) =
+      @queue.enqueue(effect)
+
+    def batch(task: Async::Task.current, &) =
+      cycle do |level|
+        task.with_timeout(0.1) do
+          yield self
+        end
+      ensure
+        flush! if level == 1
+      end
+
+    protected
+
+    def cycle
+      @level += 1
+
+      if @level > CYCLE_LIMIT
+        raise CycleDetectedError
+      end
+
+      yield @level
+    ensure
+      @level -= 1
+    end
+
+    def flush! =
+      catch_error do
+        until @queue.empty?
+          @queue.dequeue.peek
+        end
+      end
+
+    def catch_error(error = nil)
+      yield
+    rescue => e
+      error ||= e
+      Console.logger.error(self, e)
+      retry
+    ensure
+      raise error if error
     end
   end
 
