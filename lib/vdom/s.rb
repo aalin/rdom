@@ -142,7 +142,7 @@ module S
     def stop
       cleanup!
 
-      @value = Disposed
+      @compute = @value = Disposed
       mark!(States::Clean)
       @barrier.stop
       @sources.clear
