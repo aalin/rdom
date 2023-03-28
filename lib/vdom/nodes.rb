@@ -97,10 +97,8 @@ module VDOM
         end
       end
 
-      def task =
-        @task || @parent&.task || Async::Task.current
       def async(&) =
-        task.async(&)
+        Async::Task.current.async(&)
       def hierarchy =
         [*parent.hierarchy, self]
       def running? =
@@ -175,33 +173,36 @@ module VDOM
         # Define @props before calling initialize,
         # so we can use self.props inside initialize.
         instance.instance_variable_set(:@props, descriptor.props)
-        instance.send(:initialize, **descriptor.props)
 
-        yield_self do |vcomponent|
-          instance.define_singleton_method(:rerender!) do
-            vcomponent.resume(:rerender!)
+        S.root do
+          instance.send(:initialize, **descriptor.props)
+
+          yield_self do |vcomponent|
+            instance.define_singleton_method(:rerender!) do
+              vcomponent.resume(:rerender!)
+            end
+
+            instance.define_singleton_method(:emit!) do |event, **payload|
+              vcomponent.emit!(event, **payload)
+            end
           end
 
-          instance.define_singleton_method(:emit!) do |event, **payload|
-            vcomponent.emit!(event, **payload)
-          end
-        end
+          @slots = group_descriptors_by_slots(descriptor.children)
+          instance.instance_variable_set(:@slots, @slots)
 
-        @slots = group_descriptors_by_slots(descriptor.children)
-        instance.instance_variable_set(:@slots, @slots)
+          VAny.run(instance.render) do |vnode|
+            async { instance.mount }
 
-        VAny.run(instance.render) do |vnode|
-          async { instance.mount }
-
-          receive do |descriptor|
-            case descriptor
-            in :rerender!
-              vnode.resume(instance.render)
-            in Descriptor
-              @slots = group_descriptors_by_slots(descriptor.children)
-              instance.instance_variable_set(:@slots, @slots)
-              instance.instance_variable_set(:@props, descriptor.props)
-              vnode.resume(instance.render)
+            receive do |descriptor|
+              case descriptor
+              in :rerender!
+                vnode.resume(instance.render)
+              in Descriptor
+                @slots = group_descriptors_by_slots(descriptor.children)
+                instance.instance_variable_set(:@slots, @slots)
+                instance.instance_variable_set(:@props, descriptor.props)
+                vnode.resume(instance.render)
+              end
             end
           end
         end
@@ -486,21 +487,22 @@ module VDOM
         end
 
         def update_attribute(parent_id, ref_id, name, value, &)
-          if value in Reactively::API::Readable
-            update_dynamic(parent_id, ref_id, name, value, &)
+          case value
+          in S::Reactive
+            update_reactive(parent_id, ref_id, name, value, &)
           else
             update_static(parent_id, ref_id, name, value, &)
           end
         end
 
-        def update_dynamic(parent_id, ref_id, name, signal, &)
-          effect = Reactively::API::Effect.new do
-            update_static(parent_id, ref_id, name, signal.value)
+        def update_reactive(parent_id, ref_id, name, signal, &)
+          sub = signal.subscribe do |value|
+            update_static(parent_id, ref_id, name, value)
           end
 
           yield
         ensure
-          effect&.dispose!
+          sub.stop
         end
 
         def update_static(parent_id, ref_id, name, value, &)
@@ -518,16 +520,34 @@ module VDOM
         def run(parent_id, ref_id, name, handler)
           id = SecureRandom.alphanumeric(32)
 
-          callbacks.store(id, handler)
+          callbacks.store(id, wrap_reactive_root(handler))
 
           patch(Patches::SetHandler[parent_id, ref_id, name, id])
 
           receive do |handler|
-            callbacks.store(id, handler)
+            callbacks.store(id, wrap_reactive_root(handler))
           end
         ensure
           callbacks.delete(id)
           patch(Patches::RemoveHandler[parent_id, ref_id, name, id])
+        end
+
+        def wrap_reactive_root(handler, root = S::Root.current)
+          lambda do |payload|
+            root.batch do
+              S.untrack do
+                handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
+              end
+            end
+          end
+        end
+
+        def extract_kwargs(parameters)
+          parameters.map do |param|
+            if param in [:key | :keyreq, name]
+              name
+            end
+          end.compact
         end
       end
 
@@ -622,22 +642,22 @@ module VDOM
       end
     end
 
-    class VReactively < Base
+    class VReactive < Base
       def run(signal)
-        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
-          effect = Reactively::API::Effect.new do
-            vnode.resume(Descriptor.normalize_children(signal.value))
-          end
-
-          receive do |new_signal|
-            unless signal == new_signal
-              raise "Signal changed!"
+          VAny.run(Descriptor.normalize_children(signal.peek)) do |vnode|
+            sub = signal.subscribe do |value|
+              vnode.resume(Descriptor.normalize_children(value))
             end
+
+            receive do |new_signal|
+              unless signal == new_signal
+                raise "Signal changed!"
+              end
+            end
+          ensure
+            sub.stop
           end
-        ensure
-          effect.dispose!
         end
-      end
     end
 
     class VAny < Base
@@ -672,8 +692,8 @@ module VDOM
 
       def descriptor_to_node_type(descriptor)
         case descriptor
-        in Reactively::API::Readable
-          VReactively
+        in S::Reactive
+          VReactive
         in Array
           VFragment
         in Descriptor[type: CustomElement]
@@ -714,30 +734,14 @@ module VDOM
         @patches.enqueue(patch)
       def take =
         @patches.dequeue
+      def handle_callback(id, payload) =
+        @callbacks.fetch(id).call(payload)
 
       def mount_dom_node(id)
         patch(Patches::InsertBefore[nil, id, nil])
         yield
       ensure
         patch(Patches::RemoveChild[nil, id])
-      end
-
-      def handle_callback(id, payload)
-        handler = @callbacks.fetch(id)
-
-        if handler.arity.zero?
-          handler.call
-        else
-          handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
-        end
-      end
-
-      def extract_kwargs(parameters)
-        parameters.map do |param|
-          if param in [:key | :keyreq, name]
-            name
-          end
-        end.compact
       end
 
       RootElement = CustomElement[

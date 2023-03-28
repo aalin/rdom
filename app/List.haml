@@ -23,6 +23,7 @@
   end
 
   add_disabled = computed do
+    puts "\e[3;33mCalculating add_disabled #{input.value.inspect}\e[0m"
     input.value.empty?
   end
 
@@ -35,7 +36,7 @@
   append = -> do
     break if value.value.empty?
     items.value = [*items.value, Item[value.value, rand]]
-    input.value = input.value = ""
+    input.value = value.value = ""
   end
 
   sort = -> { items.value = items.value.sort_by(&:value) }

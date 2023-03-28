@@ -18,3 +18,5 @@ gem "syntax_tree-xml", "~> 0.1.0"
 gem "minitest", "~> 5.18"
 
 gem "syntax_tree-haml", "~> 3.0"
+
+gem "minitest-hooks", "~> 1.5"
