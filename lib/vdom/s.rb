@@ -95,11 +95,12 @@ module S
 
     def value=(value)
       Root.current!.batch do
-        mark!(States::Clean)
         unless @value == value
           @value = value
           notify(States::Dirty)
         end
+      ensure
+        mark!(States::Clean)
       end
     end
 
