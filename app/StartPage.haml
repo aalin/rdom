@@ -1,12 +1,19 @@
 :ruby
+  INITIAL_VALUE = 50
+
   def self.title = "Start"
 :ruby
-  size = signal(50)
+  input = signal(INITIAL_VALUE)
+  size = signal(INITIAL_VALUE)
 
   percent = computed { "#{size.value}%" }
 
   oninput = ->(target:) do
     size.value = target[:value].to_i
+  end
+
+  onchange = ->(target:) do
+    input.value = size.value = target[:value].to_i
   end
 
 %article
@@ -15,6 +22,6 @@
   %fieldset
     %legend Play with image sizes
     %p
-      %input(type="range" min="1" max="100" step="1" oninput=oninput value=size)
+      %input(type="range" min="1" max="100" step="1" oninput=oninput onchange=onchange value=input)
     %p
       %img(src="/favicon.ico" width=percent)
