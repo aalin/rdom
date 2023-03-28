@@ -90,9 +90,6 @@ module S
 
     protected
 
-    def update
-    end
-
     def value=(value)
       Root.current!.batch do
         unless @value == value
@@ -104,19 +101,16 @@ module S
       end
     end
 
-    def notify(state)
-      unless @condition.empty?
-        # puts "\e[1;31m#{self.inspect} notifying #{state}\e[0m"
-        @condition.signal(state)
-      end
-    end
+    def update =
+      nil
 
-    def mark!(state)
+    def notify(state) =
+      @condition.signal(state)
+
+    def mark!(state) =
       unless @state == state
-        # puts "#{self.inspect} changed to #{state}"
         @state = state
       end
-    end
   end
 
   class Signal < Reactive
@@ -162,25 +156,25 @@ module S
         raise CycleDetectedError
       end
 
-      # puts "\e[36mSubscribing #{self.inspect} to #{source.inspect}\e[0m"
-      @sources[source] ||=
-        @barrier.async do |subtask|
-          while state = source.wait
-            # puts "#{self.inspect} got #{state}"
-            if @state < state
-              enqueue_effect # if clean?
-              mark!(state)
-              notify(States::Check)
-            end
-          end
-        rescue => e
-          Console.logger.error(self, e)
-        ensure
-          @sources.delete_if { _1 == source && _2 == subtask }
-        end
+      @sources[source] ||= create_listener(source)
     end
 
     protected
+
+    def create_listener(source)
+      @barrier.async do |subtask|
+        while state = source.wait
+          next unless @state < state
+          enqueue_effect # if clean?
+          mark!(state)
+          notify(States::Check)
+        end
+      rescue => e
+        Console.logger.error(self, e)
+      ensure
+        @sources.delete_if { _1 == source && _2 == subtask }
+      end
+    end
 
     def update
       return if disposed?
@@ -207,10 +201,7 @@ module S
       end
     end
 
-    def wait_for_sources(barrier: Async::Barrier.new)
-      return if @sources.empty?
-      # puts "#{self.inspect} waiting for #{@sources.keys.inspect}"
-
+    def wait_for_sources
       @sources.each_key do |source|
         source.peek
         break if dirty?
@@ -268,10 +259,8 @@ module S
       @level = 0
     end
 
-    def enqueue(effect)
-      # puts "\e[34mENQUEUE: #{effect.inspect}\e[0m"
+    def enqueue(effect) =
       @queue.enqueue(effect)
-    end
 
     def run(task: Async::Task.current, &)
       @level += 1
@@ -292,13 +281,9 @@ module S
       return if @queue.empty?
 
       Reactive.untrack do
-        # puts "\e[1;3m FLUSHING #{self} \e[0m"
-
         catch_error do
           until @queue.empty?
-            effect = @queue.dequeue
-            # puts "\e[3;35mRunning #{effect.inspect}\e[0m"
-            effect.value
+            @queue.dequeue.value
           end
         end
       end
@@ -315,7 +300,7 @@ module S
     end
   end
 
-  class Cycles
+  class CycleDetector
     LIMIT = 20
 
     def initialize =
@@ -352,7 +337,7 @@ module S
       end
 
     def initialize
-      @cycles = Cycles.new
+      @cycles = CycleDetector.new
       @batch = Batch.new
     end
 
