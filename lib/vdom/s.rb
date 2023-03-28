@@ -7,7 +7,6 @@ require "async"
 require "async/barrier"
 require "async/condition"
 require "async/queue"
-require "async/semaphore"
 
 module S
   class CycleDetectedError < StandardError
