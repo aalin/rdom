@@ -46,9 +46,8 @@ module S
 
     def self.current = Fiber[CURRENT_KEY]
 
-    def initialize
+    def initialize =
       @condition = Async::Condition.new
-    end
 
     def subscribe(&)
       S.effect do
