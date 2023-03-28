@@ -282,7 +282,7 @@ module S
       Reactive.untrack do
         catch_error do
           until @queue.empty?
-            @queue.dequeue.value
+            @queue.dequeue.peek
           end
         end
       end
