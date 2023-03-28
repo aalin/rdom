@@ -644,20 +644,20 @@ module VDOM
 
     class VReactive < Base
       def run(signal)
-          VAny.run(Descriptor.normalize_children(signal.peek)) do |vnode|
-            sub = signal.subscribe do |value|
-              vnode.resume(Descriptor.normalize_children(value))
-            end
-
-            receive do |new_signal|
-              unless signal == new_signal
-                raise "Signal changed!"
-              end
-            end
-          ensure
-            sub.stop
+        VAny.run(Descriptor.normalize_children(signal.peek)) do |vnode|
+          sub = signal.subscribe do |value|
+            vnode.resume(Descriptor.normalize_children(value))
           end
+
+          receive do |new_signal|
+            unless signal == new_signal
+              raise "Signal changed!"
+            end
+          end
+        ensure
+          sub.stop
         end
+      end
     end
 
     class VAny < Base
