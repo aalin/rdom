@@ -2,22 +2,28 @@
   def initialize(**)
     @b = {}
     @o = {}
-    @x = {}
+    @i = {}
   end
 
   def mount
     loop do
       GC.stat(@b)
       ObjectSpace.count_objects(@o)
-      count_reactives(@x)
+      count_internals(@i)
       rerender!
       sleep 1
     end
   end
 
-  def count_reactives(h = {})
-    [S::Signal, S::Computed, S::Effect].each do |klass|
-      h[klass.name] = ObjectSpace.each_object(klass)
+  INTERNALS = [
+    S::Root, S::Signal, S::Computed, S::Effect,
+    VDOM::Component::Base, VDOM::Nodes::Base,
+    Async::Task,
+  ]
+
+  def count_internals(h = {})
+    INTERNALS.each do |klass|
+      h[klass.name] = ObjectSpace.each_object(klass).count
     end
   end
 
@@ -34,7 +40,7 @@
         %dt= k
         %dd= v
   %dl
-    = @x.map do |k, v|
+    = @i.map do |k, v|
       .entry[k]
         %dt= k
         %dd= v
