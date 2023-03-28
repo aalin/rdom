@@ -4,7 +4,6 @@ require_relative "transform"
 require_relative "haml_transform"
 require_relative "descriptor"
 require_relative "custom_element"
-require_relative "reactively"
 require_relative "css_units"
 require_relative "assets"
 require_relative "s"
@@ -55,7 +54,6 @@ module VDOM
     class ComponentModule < Module
       using CSSUnits::Refinements
       using S::Refinements
-      # using Reactively::Refinements
 
       def initialize(code, path) =
         instance_eval(code, path, 1)

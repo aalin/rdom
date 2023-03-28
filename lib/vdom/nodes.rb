@@ -488,8 +488,6 @@ module VDOM
 
         def update_attribute(parent_id, ref_id, name, value, &)
           case value
-          in Reactively::API::Readable
-            update_dynamic(parent_id, ref_id, name, value, &)
           in S::Reactive
             update_reactive(parent_id, ref_id, name, value, &)
           else
@@ -505,16 +503,6 @@ module VDOM
           yield
         ensure
           sub.stop
-        end
-
-        def update_dynamic(parent_id, ref_id, name, signal, &)
-          effect = Reactively::API::Effect.new do
-            update_static(parent_id, ref_id, name, signal.value)
-          end
-
-          yield
-        ensure
-          effect&.dispose!
         end
 
         def update_static(parent_id, ref_id, name, value, &)
@@ -672,24 +660,6 @@ module VDOM
         end
     end
 
-    class VReactively < Base
-      def run(signal)
-        VAny.run(Descriptor.normalize_children(signal.value)) do |vnode|
-          effect = Reactively::API::Effect.new do
-            vnode.resume(Descriptor.normalize_children(signal.value))
-          end
-
-          receive do |new_signal|
-            unless signal == new_signal
-              raise "Signal changed!"
-            end
-          end
-        ensure
-          effect.dispose!
-        end
-      end
-    end
-
     class VAny < Base
       def run(descriptor)
         loop do
@@ -722,8 +692,6 @@ module VDOM
 
       def descriptor_to_node_type(descriptor)
         case descriptor
-        in Reactively::API::Readable
-          VReactively
         in S::Reactive
           VReactive
         in Array

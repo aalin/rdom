@@ -46,8 +46,6 @@ module VDOM
       case descriptor
       in ^(self)
         descriptor
-      in Reactively::API::Readable
-        descriptor
       in S::Reactive
         descriptor
       else
