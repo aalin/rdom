@@ -147,12 +147,12 @@ module S
     ensure
       dispose!
       @barrier.stop
-      @sources.keys.each(&:stop_if_empty!)
+      @sources.each_key(&:stop_if_empty!)
       @sources.clear
     end
 
     def disposed? =
-      @value == Disposed
+      @compute == Disposed
 
     def add_source(source) =
       unless self == source
@@ -189,12 +189,7 @@ module S
         return
       end
 
-      @sources.values.then do |old_listeners|
-        cleanup!
-        self.value = call
-      ensure
-        old_listeners.each(&:stop)
-      end
+      self.value = call
     end
 
     def wait_for_sources =
@@ -208,11 +203,12 @@ module S
     def call
       return if disposed?
 
-      S.batch do
-        Utils.with_fiber_local(CURRENT_KEY, self) do
-          Reactive.track do
-            @sources.clear
-            @compute.call
+      update_sources do
+        S.batch do
+          Utils.with_fiber_local(CURRENT_KEY, self) do
+            Reactive.track do
+              @compute.call
+            end
           end
         end
       end
@@ -233,6 +229,15 @@ module S
         end
       end
     end
+
+    def update_sources =
+      @sources.values.then do |old_listeners|
+        cleanup!
+        @sources.clear
+        yield unless disposed?
+      ensure
+        old_listeners.each(&:stop)
+      end
 
     def dispose!
       @value = nil
