@@ -164,7 +164,7 @@ module S
       @barrier.async do |subtask|
         while state = source.wait
           next unless @state < state
-          enqueue_effect # if clean?
+          enqueue_effect if clean?
           mark!(state)
           notify(States::Check)
         end
