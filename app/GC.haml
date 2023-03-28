@@ -1,15 +1,18 @@
 :ruby
+  Sample = Data.define(:time, :data)
+
   def initialize(**)
     @b = {}
     @o = {}
-    @i = {}
+    @i = []
   end
 
   def mount
     loop do
       GC.stat(@b)
       ObjectSpace.count_objects(@o)
-      count_internals(@i)
+      @i.push(count_internals)
+      @i.shift while @i.size > 10
       rerender!
       sleep 1
     end
@@ -22,9 +25,29 @@
   ]
 
   def count_internals(h = {})
+    sample = Sample.new(Time.now, h)
     INTERNALS.each do |klass|
       h[klass.name] = ObjectSpace.each_object(klass).count
     end
+    sample
+  end
+
+  def build_table(data)
+    header = Set.new(["Time"])
+
+    rows = data.map do |sample|
+      [
+        sample.time.strftime("%T"),
+        sample.data
+          .except("Async::Task", "VDOM::Nodes::Base")
+          .sort_by { |k, v| header.add(k).find_index(k) }
+          .map(&:last)
+      ].flatten
+    end
+
+    [header.to_a, *rows]
+  rescue => e
+    Console.logger.error(self, e)
   end
 
 %div
@@ -39,11 +62,28 @@
       .entry[k]
         %dt= k
         %dd= v
-  %dl
-    = @i.map do |k, v|
-      .entry[k]
-        %dt= k
-        %dd= v
+  = if sample = @i.last
+    %pre= sample.inspect
+    %dl
+      = sample.data.map do |k, v|
+        .entry[k]
+          %dt= k
+          %dd= v
+  %google-chart(type="line"){
+    data: JSON.generate(build_table(@i)),
+    options: JSON.generate(
+      hAxis: { title: "Time" },
+      vAxis: { title: "Count" },
+      legend: { position: "bottom" },
+      crosshair: {
+        color: "#000",
+        trigger: "selection"
+      },
+      axes: {
+        x: { 0 => { side: "bottom" } }
+      }
+    )
+  }
 
 :css
   dl {
@@ -62,4 +102,9 @@
   }
   dl {
     text-align: right;
+  }
+
+  google-chart {
+    width: 100%;
+    aspect-ratio: 0.75;
   }
