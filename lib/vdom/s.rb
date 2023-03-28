@@ -3,7 +3,6 @@
 require "async"
 require "async/barrier"
 require "async/condition"
-require "async/notification"
 require "async/queue"
 require "async/semaphore"
 
@@ -388,23 +387,6 @@ module S
 end
 
 if __FILE__ == $0
-  S.root do
-    a = S.signal(0)
-    i = 0
-
-    S.effect do
-      puts "Running effect"
-      # Prevent test suite from spinning if limit is not hit
-      if (i += 1) > 200
-        raise "test failed"
-      end
-      a.value
-      a.value = Float::NAN
-    end
-  end
-
-  exit
-
   S.root do
     a = S.signal(0)
     b = S.signal(0)
