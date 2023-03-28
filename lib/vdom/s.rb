@@ -39,10 +39,10 @@ module S
 
     def self.tracking? =
       Fiber[TRACKING_KEY] != false
-    def self.track(tracking = true, &) =
-      Utils.with_fiber_local(TRACKING_KEY, tracking, &)
+    def self.track(&) =
+      Utils.with_fiber_local(TRACKING_KEY, true, &)
     def self.untrack(&) =
-      track(false, &)
+      Utils.with_fiber_local(TRACKING_KEY, false, &)
 
     def self.current =
       Fiber[CURRENT_KEY]
@@ -52,20 +52,15 @@ module S
     def initialize =
       @condition = Async::Condition.new
 
-    def subscribe(&)
-      S.effect do
-        value = self.value
-
-        Reactive.untrack do
-          yield value
-        end
-      end
-    end
-
-    def inspect =
-      "#<#{self.class.name} value=#{@value.inspect} #{@state}>"
     def to_s =
       @value.to_s
+    def inspect =
+      "#<#{self.class.name} value=#{@value.inspect[0..50]} #{@state}>"
+
+    def wait =
+      @condition.wait
+    def empty? =
+      @condition.empty?
 
     def clean? =
       @state == States::Clean
@@ -74,8 +69,14 @@ module S
     def dirty? =
       @state == States::Dirty
 
-    def wait =
-      @condition.wait
+    def subscribe(&) =
+      S.effect do
+        value = self.value
+
+        Reactive.untrack do
+          yield value
+        end
+      end
 
     def value
       Reactive.current_tracking&.add_source(self)
@@ -89,8 +90,11 @@ module S
 
     protected
 
+    def stop_if_empty! =
+      nil
+
     def value=(value)
-      Root.current!.batch do
+      S.batch do
         unless @value == value
           @value = value
           notify(States::Dirty)
@@ -136,14 +140,14 @@ module S
     end
 
     def inspect =
-      "#<#{self.class.name} #{@compute.source_location.join(":")} value=#{@value.inspect} #@state>"
+      "#<#{self.class.name} #{@compute.source_location.join(":")} value=#{@value.inspect[0..50]} #@state>"
 
     def stop
       cleanup!
     ensure
-      @compute = @value = Disposed
-      mark!(States::Clean)
+      dispose!
       @barrier.stop
+      @sources.keys.each(&:stop_if_empty!)
       @sources.clear
     end
 
@@ -157,6 +161,9 @@ module S
 
     protected
 
+    def stop_if_empty! =
+      (stop if empty?)
+
     def create_listener(source) =
       @barrier.async do |subtask|
         while state = source.wait
@@ -169,11 +176,11 @@ module S
         Console.logger.error(self, e)
       ensure
         @sources.delete_if { _1 == source && _2 == subtask }
+        source.stop_if_empty!
       end
 
     def update
-      return if disposed?
-      return if clean?
+      return if clean? or disposed?
 
       wait_for_sources if check?
 
@@ -182,9 +189,7 @@ module S
         return
       end
 
-      old_listeners = @sources.values
-
-      begin
+      @sources.values.then do |old_listeners|
         cleanup!
         self.value = call
       ensure
@@ -229,8 +234,13 @@ module S
       end
     end
 
-    def enqueue_effect =
-      nil
+    def dispose!
+      @value = nil
+      mark!(States::Dirty)
+    end
+
+    def enqueue_effect
+    end
   end
 
   class Effect < Computed
@@ -241,6 +251,14 @@ module S
 
     def enqueue_effect =
       Root.current!.enqueue(self)
+
+    def dispose!
+      @compute = @value = Disposed
+      mark!(States::Clean)
+    end
+
+    def stop_if_empty! =
+      nil
   end
 
   class Root
@@ -252,16 +270,18 @@ module S
     def self.current! =
       current || raise("No root!")
 
+    def self.with(root, &) =
+      Utils.with_fiber_local(CURRENT_KEY, root, &)
+
     def self.run(&) =
       Async do |task|
-        Fiber[CURRENT_KEY] = root = new
-
-        begin
+        with(new) do |root|
           yield root
         ensure
           root.stop
-          task.stop
         end
+      ensure
+        task.stop
       end
 
     def initialize(task: Async::Task.current)
@@ -276,13 +296,15 @@ module S
     def enqueue(effect) =
       @queue.enqueue(effect)
 
-    def batch(task: Async::Task.current, &) =
-      cycle do |level|
-        task.with_timeout(0.1) do
-          yield self
+    def batch(&) =
+      Root.with(self) do
+        cycle do |level|
+          @barrier.async do |task|
+            yield self
+          end.wait
+        ensure
+          flush! if level == 1
         end
-      ensure
-        flush! if level == 1
       end
 
     protected

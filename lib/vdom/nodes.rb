@@ -532,7 +532,7 @@ module VDOM
           patch(Patches::RemoveHandler[parent_id, ref_id, name, id])
         end
 
-        def wrap_reactive_root(handler, root = S::Root.current)
+        def wrap_reactive_root(handler, root = S::Root.current!)
           lambda do |payload|
             root.batch do
               S.untrack do
