@@ -11,6 +11,6 @@ module VDOM
       new(Assets::Asset[content, mime_type])
 
     def import_html =
-      "<style>@import url(#{asset.path});</style>"
+      %{<link rel="stylesheet" href="#{asset.path}" integrity="#{asset.integrity}">}
   end
 end
