@@ -231,8 +231,8 @@ module S
 
     def update_sources =
       @sources.values.then do |old_listeners|
-        cleanup!
         @sources.clear
+        cleanup!
         yield unless disposed?
       ensure
         old_listeners.each(&:stop)

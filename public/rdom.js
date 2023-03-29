@@ -414,6 +414,8 @@ const PatchFunctions = {
     this.nodes.set(
       callbackId,
       elem.addEventListener(event.replace(/^on/, ""), (e) => {
+        e.preventDefault()
+
         const payload = {
           type: e.type,
           target: e.target && {

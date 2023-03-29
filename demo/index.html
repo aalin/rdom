@@ -4,11 +4,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RDOM embed demo</title>
+
+    <!-- https://github.com/guybedford/es-module-shims -->
     <script type="esms-options">
       { "polyfillEnable": ["css-modules"] }
     </script>
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.7.0/dist/es-module-shims.js"></script>
+
+    <!-- https://shoelace.style/ -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.3.0/dist/themes/light.css" />
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.3.0/dist/shoelace.js"></script>
+
+    <!-- https://www.webcomponents.org/element/@google-web-components/google-chart -->
     <script async type="module" src="https://unpkg.com/@google-web-components/google-chart?module"></script>
+
     <style>
       html {
         height: 100%;
