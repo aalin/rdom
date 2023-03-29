@@ -184,6 +184,7 @@ module VDOM
           200,
           {
             "content-type" => asset.content_type,
+            "content-encoding" => asset.content_encoding,
             "cache-control" => ASSET_CACHE_CONTROL,
             **origin_header(request),
           },
