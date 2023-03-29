@@ -723,10 +723,13 @@ module VDOM
       attr_reader :callbacks
 
       def register_custom_element(custom_element)
+        Assets.instance.store(custom_element.asset)
+        if stylesheet = custom_element.stylesheet
+          Assets.instance.store(custom_element.stylesheet.asset)
+        end
         patch(Patches::DefineCustomElement[
           custom_element.name,
-          custom_element.template,
-          custom_element.stylesheet&.filename,
+          custom_element.asset.filename,
         ]) if @sent_assets.add?(custom_element)
       end
 

@@ -124,6 +124,7 @@ module VDOM
 
       CACHE_MAX_AGE = 60 * 60 * 24 * 7
       ASSET_CACHE_CONTROL = "public, max-age=#{CACHE_MAX_AGE}, immutable"
+      # ASSET_CACHE_CONTROL = "no-cache"
 
       def initialize(component:, public_path:)
         @component = component
@@ -175,6 +176,7 @@ module VDOM
       def handle_rdom_asset(request)
         asset =
           Assets.instance.fetch(File.basename(request.path)) do
+            Console.logger.error(self, "Could not find #{File.basename(request.path)}")
             return handle_404(request)
           end
 

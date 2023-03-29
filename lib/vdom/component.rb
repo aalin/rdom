@@ -75,8 +75,8 @@ module VDOM
       private
 
       def load_component(source, path)
-        puts "\e[3m SOURCE \e[0m"
-        puts "\e[33m#{source}\e[0m"
+        # puts "\e[3m SOURCE \e[0m"
+        # puts "\e[33m#{source}\e[0m"
 
         source = transform_haml(source, path)
         source = transform_ruby(source, path)
@@ -90,8 +90,12 @@ module VDOM
         component.define_singleton_method(:title) { name }
         component.const_set(:COMPONENT_META, { name:, path: }.freeze)
 
-        if stylesheet = component.const_get(:RDOM_Stylesheet)
-          Assets.instance.store(stylesheet)
+        if stylesheet = component.const_get(HamlTransform::STYLES_CONST_NAME)
+          Assets.instance.store(stylesheet.asset)
+        end
+
+        if partials = component.const_get(HamlTransform::PARTIALS_CONST_NAME)
+          partials.each { Assets.instance.store(_1.asset) }
         end
 
         component

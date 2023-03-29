@@ -133,8 +133,6 @@ module VDOM
           .then { _1.slice(0, 12).to_s }
           .then { Base64.urlsafe_encode64(_1) }
 
-      filename = "#{content_hash}.css"
-
       Assign(
         VarField(Const(STYLES_CONST_NAME)),
         ARef(
@@ -143,7 +141,6 @@ module VDOM
             VarRef(Const("StyleSheet")),
           ),
           Args([
-            StringLiteral([TStringContent(filename)], "'"),
             Heredoc(
               HeredocBeg("<<CSS"),
               HeredocEnd("CSS"),
@@ -266,11 +263,11 @@ module VDOM
 
     def custom_element_name(str)
       str
-        .gsub(/[:\/]+/, CLASS_SEPARATOR)
-        .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1-\2')
-        .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1-\2')
-        .tr("_", "-")
+        .then { Digest::SHA256.digest(_1) }
+        .then { Base64.urlsafe_encode64(_1) }
         .downcase
+        .gsub(/[^[:alnum:]]/, "")
+        .then { _1[0..10] }
         .prepend(CUSTOM_ELEMENT_NAME_PREFIX)
     end
 

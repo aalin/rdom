@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
+require "mime-types"
+
 module VDOM
-  StyleSheet = Data.define(:filename, :content) do
-    CONTENT_TYPE = "text/css"
+  StyleSheet = Data.define(:asset) do
+    def self.mime_type =
+      MIME::Types["text/css"].first
 
-    def content_type =
-      CONTENT_TYPE
-
-    def path =
-      "/.rdom/#{filename}"
+    def self.[](content) =
+      new(Assets::Asset[content, mime_type])
 
     def import_html =
-      "<style>@import #{path.inspect};</style>"
+      "<style>@import url(#{asset.path});</style>"
   end
 end

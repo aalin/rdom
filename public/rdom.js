@@ -300,8 +300,7 @@ const PatchFunctions = {
     root.remove();
   },
   CreateElement(id, type) {
-    const CustomElement = customElements.get(type);
-    this.nodes.set(id, new CustomElement())
+    this.nodes.set(id, document.createElement(type))
   },
   InsertBefore(parentId, id, refId) {
     const parent = this.nodes.get(parentId);
@@ -328,15 +327,20 @@ const PatchFunctions = {
     }
     this.nodes.delete(id);
   },
-  DefineCustomElement(name, template, css) {
-    RDOMElement.define(name, template, css)
+  DefineCustomElement(name, filename) {
+    fetchTemplate(`${this.endpoint}/${filename}`).then((html) => {
+      RDOMElement.define(name, html, null)
+    })
   },
   AssignSlot(id, name, ids) {
     const node = this.nodes.get(id);
-    node?.assignSlot(
-      name,
-      ids.map((id) => this.nodes.get(id)).filter(Boolean)
-    )
+    if (!node) return
+    customElements.whenDefined(node.localName).then(() => {
+      node.assignSlot(
+        name,
+        ids.map((id) => this.nodes.get(id)).filter(Boolean)
+      )
+    })
   },
   CreateTextNode(id, content) {
     this.nodes.set(id, document.createTextNode(content));
@@ -356,33 +360,35 @@ const PatchFunctions = {
   SetAttribute(parentId, refId, name, value) {
     const parent = this.nodes.get(parentId);
     if (!parent) return
-    const node = parent.shadowRoot?.getElementById(refId);
-    if (!node) return
+    customElements.whenDefined(parent.localName).then(() => {
+      const node = parent.shadowRoot?.getElementById(refId);
+      if (!node) return
 
-    if (node instanceof HTMLInputElement) {
-      switch (name) {
-        case "value": {
-          node.value = value;
-          break;
-        }
-        case "checked": {
-          node.checked = true;
-          break;
-        }
-        case "indeterminate": {
-          node.indeterminate = true;
-          break;
+      if (node instanceof HTMLInputElement) {
+        switch (name) {
+          case "value": {
+            node.value = value;
+            break;
+          }
+          case "checked": {
+            node.checked = true;
+            break;
+          }
+          case "indeterminate": {
+            node.indeterminate = true;
+            break;
+          }
         }
       }
-    }
 
-    if (name === "initial-value") {
-      name = "value";
-    } else {
-      name = name.replaceAll("_", "");
-    }
+      if (name === "initial-value") {
+        name = "value";
+      } else {
+        name = name.replaceAll("_", "");
+      }
 
-    node.setAttribute(name, value);
+      node.setAttribute(name, value);
+    })
   },
   RemoveAttribute(parentId, refId, name) {
     const parent = this.nodes.get(parentId);
@@ -409,23 +415,25 @@ const PatchFunctions = {
   },
   SetHandler(parentId, refId, event, callbackId) {
     const parent = this.nodes.get(parentId)
-    const elem = parent.shadowRoot.getElementById(refId);
+    customElements.whenDefined(parent.localName).then(() => {
+      const elem = parent.shadowRoot.getElementById(refId);
 
-    this.nodes.set(
-      callbackId,
-      elem.addEventListener(event.replace(/^on/, ""), (e) => {
-        e.preventDefault()
+      this.nodes.set(
+        callbackId,
+        elem.addEventListener(event.replace(/^on/, ""), (e) => {
+          e.preventDefault()
 
-        const payload = {
-          type: e.type,
-          target: e.target && {
-            value: e.target.value,
-          },
-        };
+          const payload = {
+            type: e.type,
+            target: e.target && {
+              value: e.target.value,
+            },
+          };
 
-        this.enqueue(["callback", callbackId, payload]);
-      })
-    );
+          this.enqueue(["callback", callbackId, payload]);
+        })
+      )
+    })
   },
   RemoveHandler(parentId, refId, event, callbackId) {
     const parent = this.nodes.get(parentId)
@@ -478,10 +486,17 @@ class RDOMElement extends HTMLElement {
   assignSlot(name, nodes) {
     const slot = this.shadowRoot.getElementById(name)
     if (!slot) {
-      throw new Error(`No slot with id ${id}`)
+      throw new Error(`No slot with name ${name}`)
     }
     slot.assign(...nodes);
   }
+}
+
+async function fetchTemplate(url) {
+  const res = await fetch(url, {
+    headers: new Headers({ accept: "text/html" }),
+  })
+  return res.text();
 }
 
 async function importAndAdoptStyleSheet(shadow, path) {
