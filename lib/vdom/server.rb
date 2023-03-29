@@ -166,6 +166,8 @@ module VDOM
         send_file("rdom.js", "application/javascript; charset=utf-8", origin_header(request))
 
       def handle_404(request)
+        Console.logger.error(self, "File not found at #{request.path.inspect}")
+
         Protocol::HTTP::Response[
           404,
           { "content-type" => "text/plain; charset-utf-8" },
@@ -176,7 +178,6 @@ module VDOM
       def handle_rdom_asset(request)
         asset =
           Assets.instance.fetch(File.basename(request.path)) do
-            Console.logger.error(self, "Could not find #{File.basename(request.path)}")
             return handle_404(request)
           end
 
