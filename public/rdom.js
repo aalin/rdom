@@ -402,9 +402,11 @@ const PatchFunctions = {
   SetCSSProperty(parentId, refId, name, value) {
     const parent = this.nodes.get(parentId)
     if (!parent) return
-    const node = parent.shadowRoot.getElementById(refId);
-    if (!node) return
-    node.style.setProperty(name, value);
+    customElements.whenDefined(parent.localName).then(() => {
+      const node = parent.shadowRoot.getElementById(refId);
+      if (!node) return
+      node.style.setProperty(name, value);
+    })
   },
   RemoveCSSProperty(parentId, refId, name) {
     const parent = this.nodes.get(parentId)
