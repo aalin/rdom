@@ -5,6 +5,29 @@ const STREAM_MIME_TYPE = "x-rdom/json-stream";
 const CONNECTED_STATE = "--connected"
 const CONNECTED_CLASS = "--rdom-connected"
 
+const STYLESHEETS = {
+  root: createStylesheet(`
+    :host {
+      display: flow-root;
+      box-sizing: border-box;
+    }
+    *:not(:defined) {
+      /* Hide elements until they are fully loaded */
+      display: none;
+    }
+  `),
+  customElement: createStylesheet(`
+    :host {
+      display: contents;
+    }
+  `),
+  boxSizing: createStylesheet(`
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+  `),
+}
+
 customElements.define(
   ELEMENT_NAME,
   class VDOMRoot extends HTMLElement {
@@ -16,25 +39,10 @@ customElements.define(
       this.#internals = this.attachInternals();
       this.#setConnectedState(false);
 
-      const styles = new CSSStyleSheet();
-
-      styles.replace(`
-        :host {
-          display: flow-root;
-          box-sizing: border-box;
-        }
-        *,
-        *::before,
-        *::after {
-          box-sizing: border-box;
-        }
-        *:not(:defined) {
-          /* Hide elements until they are fully loaded */
-          display: none;
-        }
-      `);
-
-      this.shadowRoot.adoptedStyleSheets = [styles];
+      this.shadowRoot.adoptedStyleSheets = [
+        STYLESHEETS.root,
+        STYLESHEETS.boxSizing,
+      ];
     }
 
     async connectedCallback() {
@@ -474,7 +482,6 @@ const PatchFunctions = {
 
 class RDOMElement extends HTMLElement {
   static template = null;
-  static styles = createCustomElementStyleSheet();
 
   static async fetchAndDefine(name, url) {
     if (customElements.get(name)) return;
@@ -500,10 +507,16 @@ class RDOMElement extends HTMLElement {
       slotAssignment: "manual",
     });
 
-    const { template, stylesheet, styles } = this.constructor;
+    const { template, stylesheet } = this.constructor;
 
-    this.shadowRoot.appendChild(template.content.cloneNode(true));
-    this.shadowRoot.adoptedStyleSheets = [styles];
+    this.shadowRoot.appendChild(
+      template.content.cloneNode(true)
+    );
+
+    this.shadowRoot.adoptedStyleSheets = [
+      STYLESHEETS.customElement,
+      STYLESHEETS.boxSizing,
+    ];
   }
 
   assignSlot(name, nodes) {
@@ -515,16 +528,9 @@ class RDOMElement extends HTMLElement {
   }
 }
 
-function createCustomElementStyleSheet() {
+function createStylesheet(source) {
   const styles = new CSSStyleSheet();
-  styles.replace(`
-    :host { display: contents; }
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-    }
-  `)
+  styles.replace(source)
   return styles;
 }
 
