@@ -517,8 +517,20 @@ function createCustomElementStyleSheet() {
   return styles;
 }
 
+// TODO: Get the path from the endpoint attribute instead of hardcoding it.
+const BASE_URL = new URL("/.rdom/", import.meta.url)
+console.warn("BASE_URL", BASE_URL.toString())
+
 function createTemplate(html) {
-  const template = document.createElement("template");
-  template.innerHTML = html
+  const template =
+    document
+      .createRange()
+      .createContextualFragment(`<template>${html}</template>`)
+      .firstElementChild;
+  for (const link of template.content.querySelectorAll('link')) {
+    const url = new URL(link.getAttribute("href"), BASE_URL)
+    console.warn(url.toString(), BASE_URL.toString())
+    link.setAttribute('href', url)
+  }
   return template
 }

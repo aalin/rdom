@@ -38,7 +38,7 @@ module VDOM
         end
 
       def path =
-        "/.rdom/#{filename}"
+        filename
       def content =
         encoded_content.content
       def content_encoding =
