@@ -2,8 +2,8 @@ const ELEMENT_NAME = "rdom-embed";
 const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
-const CONNECTED_STATE = "--connected"
-const CONNECTED_CLASS = "--rdom-connected"
+const CONNECTED_STATE = "--connected";
+const CONNECTED_CLASS = "--rdom-connected";
 
 const STYLESHEETS = {
   root: createStylesheet(`
@@ -26,12 +26,12 @@ const STYLESHEETS = {
       box-sizing: border-box;
     }
   `),
-}
+};
 
 customElements.define(
   ELEMENT_NAME,
   class VDOMRoot extends HTMLElement {
-    #internals
+    #internals;
 
     constructor() {
       super();
@@ -388,7 +388,7 @@ const PatchFunctions = {
     const parent = this.nodes.get(parentId);
     if (!parent) return;
     customElements.whenDefined(parent.localName).then(() => {
-      const node = parent.shadowRoot?.getElementById(refId);
+      const node = parent.getRef(refId);
       if (!node) return;
 
       if (node instanceof HTMLInputElement) {
@@ -420,8 +420,9 @@ const PatchFunctions = {
   RemoveAttribute(parentId, refId, name) {
     const parent = this.nodes.get(parentId);
     if (!parent) return;
-    const node = parent.shadowRoot?.getElementById(refId);
-    node?.removeAttribute(name);
+    customElements.whenDefined(parent.localName).then(() => {
+      parent.getRef(refId)?.removeAttribute(name);
+    });
   },
   CreateDocumentFragment(id) {
     this.nodes.set(id, document.createDocumentFragment());
@@ -430,22 +431,20 @@ const PatchFunctions = {
     const parent = this.nodes.get(parentId);
     if (!parent) return;
     customElements.whenDefined(parent.localName).then(() => {
-      const node = parent.shadowRoot.getElementById(refId);
-      if (!node) return;
-      node.style.setProperty(name, value);
+      parent.getRef(refId)?.style?.setProperty(name, value);
     });
   },
   RemoveCSSProperty(parentId, refId, name) {
     const parent = this.nodes.get(parentId);
     if (!parent) return;
-    const node = parent.shadowRoot.getElementById(refId);
-    if (!node) return;
-    node.style.removeProperty(name);
+    customElements.whenDefined(parent.localName).then(() => {
+      parent.getRef(refId)?.style?.removeProperty(name);
+    });
   },
   SetHandler(parentId, refId, event, callbackId) {
     const parent = this.nodes.get(parentId);
     customElements.whenDefined(parent.localName).then(() => {
-      const elem = parent.shadowRoot.getElementById(refId);
+      const elem = parent.getRef(refId);
 
       this.nodes.set(
         callbackId,
@@ -465,15 +464,17 @@ const PatchFunctions = {
     });
   },
   RemoveHandler(parentId, refId, event, callbackId) {
+    this.nodes.delete(callbackId);
     const parent = this.nodes.get(parentId);
     if (!parent) return;
-    const elem = parent.shadowRoot?.getElementById(refId);
-
-    elem?.removeEventListener(
-      event.replace(/^on/, ""),
-      this.nodes.get(callbackId)
-    );
-    this.nodes.delete(callbackId);
+    customElements.whenDefined(parent.localName).then(() => {
+      parent
+        .getRef(refId)
+        ?.removeEventListener(
+          event.replace(/^on/, ""),
+          this.nodes.get(callbackId)
+        );
+    });
   },
   Ping(time) {
     this.enqueue(["pong", time]);
@@ -482,6 +483,8 @@ const PatchFunctions = {
 
 class RDOMElement extends HTMLElement {
   static template = null;
+  #slots = {};
+  #refs = {};
 
   static async fetchAndDefine(name, url) {
     if (customElements.get(name)) return;
@@ -509,9 +512,19 @@ class RDOMElement extends HTMLElement {
 
     const { template, stylesheet } = this.constructor;
 
-    this.shadowRoot.appendChild(
-      template.content.cloneNode(true)
-    );
+    this.shadowRoot.appendChild(template.content.cloneNode(true));
+
+    for (const node of this.shadowRoot.querySelectorAll(
+      "slot[data-rdom-slot]"
+    )) {
+      this.#slots[node.dataset.rdomSlot] = node;
+      node.removeAttribute("data-rdom-slot");
+    }
+
+    for (const node of this.shadowRoot.querySelectorAll("[data-rdom-ref]")) {
+      this.#refs[node.dataset.rdomRef] = node;
+      node.removeAttribute("data-rdom-ref");
+    }
 
     this.shadowRoot.adoptedStyleSheets = [
       STYLESHEETS.customElement,
@@ -519,8 +532,14 @@ class RDOMElement extends HTMLElement {
     ];
   }
 
+  getRef(refId) {
+    const ref = this.#refs[refId];
+    if (ref) return ref;
+    console.error("Could not find ref", refId);
+  }
+
   assignSlot(name, nodes) {
-    const slot = this.shadowRoot.getElementById(name);
+    const slot = this.#slots[name];
     if (!slot) {
       throw new Error(`No slot with name ${name}`);
     }
@@ -530,7 +549,7 @@ class RDOMElement extends HTMLElement {
 
 function createStylesheet(source) {
   const styles = new CSSStyleSheet();
-  styles.replace(source)
+  styles.replace(source);
   return styles;
 }
 

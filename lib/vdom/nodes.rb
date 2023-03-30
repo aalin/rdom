@@ -749,7 +749,7 @@ module VDOM
 
       RootElement = CustomElement[
         "rdom-root",
-        '<slot id="children"></slot>',
+        %{<slot data-rdom-slot="children"></slot>},
         nil
       ]
 

@@ -48,7 +48,7 @@ module VDOM
 
     Tag = Data.define(:name, :key, :attrs, :props, :children) do
       def to_s
-        "<#{name}#{attrs.map { format(' %s="%s"', _1, _2) }.join}>#{children.join}</#{name}>"
+        "<#{name}#{attrs.map { format(' %s="%s"', _1.to_s.tr("_", "-"), _2) }.join}>#{children.join}</#{name}>"
       end
     end
 
@@ -288,7 +288,7 @@ module VDOM
           ]
         ]
         custom_element.refs.push(ref)
-        attributes = { **attributes, id: ref.name }
+        attributes = { **attributes, data_rdom_ref: ref.name }
       end
 
       if parse
@@ -344,7 +344,7 @@ module VDOM
     def create_slot(custom_element, children)
       slot = Slot["slot#{custom_element.slots.size}", children]
       custom_element.slots.push(slot)
-      Tag[:slot, nil, { id: slot.name }, {}, []]
+      Tag[:slot, nil, { data_rdom_slot: slot.name }, {}, []]
     end
 
     def parse_ruby(code, fix: true)
