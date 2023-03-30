@@ -10,6 +10,7 @@ const STYLESHEETS = {
     :host {
       display: flow-root;
       box-sizing: border-box;
+      content-visibility: auto;
     }
     *:not(:defined) {
       /* Hide elements until they are fully loaded */
