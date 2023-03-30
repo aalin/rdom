@@ -56,7 +56,7 @@ module VDOM
       using S::Refinements
 
       def initialize(code, path) =
-        instance_eval(code, path, 1)
+        instance_eval(code, path.to_s, 1)
     end
 
     class Loader
@@ -67,8 +67,7 @@ module VDOM
       end
 
       def load_file(filename, source_path = nil)
-        path = File.expand_path(filename, source_path).freeze
-
+        path = Pathname.new(File.expand_path(filename, source_path)).freeze
         @loaded_components[path] ||= load_component(File.read(path), path)
       end
 
@@ -78,8 +77,9 @@ module VDOM
         # puts "\e[3m SOURCE \e[0m"
         # puts "\e[33m#{source}\e[0m"
 
-        source = transform_haml(source, path)
-        source = transform_ruby(source, path)
+        relative_path = path.relative_path_from(Dir.pwd)
+        source = transform_haml(source, relative_path)
+        source = transform_ruby(source, relative_path)
 
         puts "\e[3m TRANSFORMED \e[0m"
         puts "\e[32m#{source}\e[0m"

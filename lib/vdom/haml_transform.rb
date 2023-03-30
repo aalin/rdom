@@ -58,7 +58,6 @@ module VDOM
 
     PARTIALS_CONST_NAME = "RDOM_Partials"
     STYLES_CONST_NAME = "RDOM_Stylesheet"
-    CLASS_SEPARATOR = '꞉꞉' # U+A789
     CUSTOM_ELEMENT_NAME_PREFIX = "rdom-elem-"
 
     include SyntaxTree::DSL
@@ -263,12 +262,12 @@ module VDOM
 
     def custom_element_name(str)
       str
-        .then { Digest::SHA256.digest(_1) }
-        .then { Base64.urlsafe_encode64(_1) }
-        .downcase
-        .gsub(/[^[:alnum:]]/, "")
-        .then { _1[0..10] }
+        .gsub(/[:\/]+/, "-")
+        .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1-\2')
+        .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1-\2')
+        .tr("_", "-")
         .prepend(CUSTOM_ELEMENT_NAME_PREFIX)
+        .downcase
     end
 
     def build_tag(custom_element, node)
