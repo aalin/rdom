@@ -14,7 +14,7 @@ module VDOM
     RemoveChild = Data.define(:parent_id, :id)
     RemoveNode = Data.define(:id)
 
-    DefineCustomElement = Data.define(:name, :template, :stylesheet_path)
+    DefineCustomElement = Data.define(:name, :filename)
     AssignSlot = Data.define(:parent_id, :name, :node_ids)
 
     CreateChildren = Data.define(:parent_id, :slot_id)

@@ -20,3 +20,7 @@ gem "minitest", "~> 5.18"
 gem "syntax_tree-haml", "~> 3.0"
 
 gem "minitest-hooks", "~> 1.5"
+
+gem "mime-types", "~> 3.4"
+
+gem "brotli", "~> 0.4.0"

@@ -58,7 +58,6 @@ module VDOM
 
     PARTIALS_CONST_NAME = "RDOM_Partials"
     STYLES_CONST_NAME = "RDOM_Stylesheet"
-    CLASS_SEPARATOR = '꞉꞉' # U+A789
     CUSTOM_ELEMENT_NAME_PREFIX = "rdom-elem-"
 
     include SyntaxTree::DSL
@@ -133,8 +132,6 @@ module VDOM
           .then { _1.slice(0, 12).to_s }
           .then { Base64.urlsafe_encode64(_1) }
 
-      filename = "#{content_hash}.css"
-
       Assign(
         VarField(Const(STYLES_CONST_NAME)),
         ARef(
@@ -143,7 +140,6 @@ module VDOM
             VarRef(Const("StyleSheet")),
           ),
           Args([
-            StringLiteral([TStringContent(filename)], "'"),
             Heredoc(
               HeredocBeg("<<CSS"),
               HeredocEnd("CSS"),
@@ -266,12 +262,12 @@ module VDOM
 
     def custom_element_name(str)
       str
-        .gsub(/[:\/]+/, CLASS_SEPARATOR)
+        .gsub(/[:\/]+/, "-")
         .gsub(/([[:upper:]]+)([[:upper:]][[:lower:]])/, '\1-\2')
         .gsub(/([[[:lower:]][[:digit:]]])([[:upper:]])/, '\1-\2')
         .tr("_", "-")
-        .downcase
         .prepend(CUSTOM_ELEMENT_NAME_PREFIX)
+        .downcase
     end
 
     def build_tag(custom_element, node)
