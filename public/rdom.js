@@ -8,11 +8,13 @@ const CONNECTED_CLASS = "--rdom-connected"
 customElements.define(
   ELEMENT_NAME,
   class VDOMRoot extends HTMLElement {
+    #internals
+
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      this._internals = this.attachInternals();
-      this._setConnectedState(false);
+      this.#internals = this.attachInternals();
+      this.#setConnectedState(false);
 
       const styles = new CSSStyleSheet();
 
@@ -36,7 +38,7 @@ customElements.define(
 
         const output = initCallbackStream(endpoint, getSessionIdHeader(res));
 
-        this._setConnectedState(true);
+        this.#setConnectedState(true);
 
         await res.body
           .pipeThrough(new TextDecoderStream())
@@ -47,16 +49,16 @@ customElements.define(
           .pipeTo(output);
       } finally {
         console.error("🔴 Disconnected!");
-        this._setConnectedState(false);
+        this.#setConnectedState(false);
       }
     }
 
-    _setConnectedState(isConnected) {
+    #setConnectedState(isConnected) {
       if (isConnected) {
-        this._internals.states?.add(CONNECTED_STATE);
+        this.#internals.states?.add(CONNECTED_STATE);
         this.classList.add(CONNECTED_CLASS);
       } else {
-        this._internals.states?.delete(CONNECTED_STATE);
+        this.#internals.states?.delete(CONNECTED_STATE);
         this.classList.remove(CONNECTED_CLASS);
       }
     }
