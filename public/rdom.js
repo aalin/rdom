@@ -2,7 +2,8 @@ const ELEMENT_NAME = "rdom-embed";
 const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
-const DISCONNECTED_STATE = "--disconnected";
+const CONNECTED_STATE = "--connected"
+const CONNECTED_CLASS = "--rdom-connected"
 
 customElements.define(
   ELEMENT_NAME,
@@ -14,7 +15,17 @@ customElements.define(
       this._setConnectedState(false);
 
       const styles = new CSSStyleSheet();
-      styles.replace(":host { display: flow-root; }");
+
+      styles.replace(`
+        :host {
+          display: flow-root;
+        }
+        *:not(:defined) {
+          /* Hide elements until they are fully loaded */
+          display: none;
+        }
+      `);
+
       this.shadowRoot.adoptedStyleSheets = [styles];
     }
 
@@ -42,9 +53,11 @@ customElements.define(
 
     _setConnectedState(isConnected) {
       if (isConnected) {
-        this._internals.states?.delete(DISCONNECTED_STATE);
+        this._internals.states?.add(CONNECTED_STATE);
+        this.classList.add(CONNECTED_CLASS);
       } else {
-        this._internals.states?.add(DISCONNECTED_STATE);
+        this._internals.states?.delete(CONNECTED_STATE);
+        this.classList.remove(CONNECTED_CLASS);
       }
     }
   }
