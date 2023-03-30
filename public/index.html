@@ -33,6 +33,8 @@
         overflow-y: scroll;
         background: var(--background);
         color: var(--color);
+        margin: 0;
+        padding: 0;
       }
 
       ::view-transition-old(root),
@@ -40,14 +42,36 @@
         animation-duration: 100ms;
       }
 
-      /* Fallback, https://caniuse.com/mdn-api_customstateset */
-      rdom-embed:not(.--rdom-connected) {
-        outline: 5px solid #c00;
+      @keyframes connected {
+        0% { outline: 0px solid #0c0; }
+        0% { outline: 5px solid #0c0; }
+        100% { outline: 0px solid #0c0; }
+      }
+
+      @keyframes disconnected {
+        0% { outline: 0px solid #c00; }
+        50% { outline: 10px solid #c00; }
+        100% { outline: 5px solid #c00; }
+      }
+
+
+      rdom-embed {
+        transition: outline-color 50ms;
+        margin: 1rem;
       }
 
       /* Preferred, https://developer.mozilla.org/en-US/docs/Web/API/CustomStateSet#examples */
-      rdom-embed:not(:--connected) {
-        outline: 5px solid #c00;
+      rdom-embed:--connected,
+      /* Fallback, https://caniuse.com/mdn-api_customstateset */
+      rdom-embed.--rdom-connected {
+        animation: connected 1s normal forwards ease-in-out;
+      }
+
+      /* Preferred, https://developer.mozilla.org/en-US/docs/Web/API/CustomStateSet#examples */
+      rdom-embed:not(:--connected),
+      /* Fallback, https://caniuse.com/mdn-api_customstateset */
+      rdom-embed:not(.--rdom-connected) {
+        animation: disconnected 1s normal forwards ease-in-out;
       }
     </style>
   </head>
