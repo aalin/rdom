@@ -21,6 +21,12 @@ customElements.define(
       styles.replace(`
         :host {
           display: flow-root;
+          box-sizing: border-box;
+        }
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
         }
         *:not(:defined) {
           /* Hide elements until they are fully loaded */
@@ -511,7 +517,14 @@ class RDOMElement extends HTMLElement {
 
 function createCustomElementStyleSheet() {
   const styles = new CSSStyleSheet();
-  styles.replace(":host { display: contents; }");
+  styles.replace(`
+    :host { display: contents; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+  `)
   return styles;
 }
 
