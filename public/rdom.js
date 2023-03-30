@@ -328,9 +328,7 @@ const PatchFunctions = {
     this.nodes.delete(id);
   },
   DefineCustomElement(name, filename) {
-    fetchTemplate(`${this.endpoint}/${filename}`).then((html) => {
-      RDOMElement.define(name, html, null)
-    })
+    RDOMElement.fetchAndDefine(name, new URL(`${this.endpoint}/${filename}`, import.meta.url))
   },
   AssignSlot(id, name, ids) {
     const node = this.nodes.get(id);
@@ -455,19 +453,22 @@ const PatchFunctions = {
 
 class RDOMElement extends HTMLElement {
   static template = null;
-  static stylesheet = null;
   static styles = createCustomElementStyleSheet();
 
-  static define(name, html, stylesheet) {
-    if (customElements.get(name)) {
-      return
-    }
+  static async fetchAndDefine(name, url) {
+    if (customElements.get(name)) return
+    const html = await fetchTemplate(url);
+    const template = createTemplate(html, url);
+    RDOMElement.define(name, template);
+  }
+
+  static define(name, template) {
+    if (customElements.get(name)) return
 
     customElements.define(
       name,
       class extends RDOMElement {
-        static template = createTemplate(html)
-        static stylesheet = stylesheet
+        static template = template
       }
     )
   }
@@ -482,7 +483,6 @@ class RDOMElement extends HTMLElement {
 
     this.shadowRoot.appendChild(template.content.cloneNode(true));
     this.shadowRoot.adoptedStyleSheets = [styles];
-    importAndAdoptStyleSheet(this.shadowRoot, stylesheet)
   }
 
   assignSlot(name, nodes) {
@@ -494,6 +494,12 @@ class RDOMElement extends HTMLElement {
   }
 }
 
+function createCustomElementStyleSheet() {
+  const styles = new CSSStyleSheet();
+  styles.replace(":host { display: contents; }")
+  return styles;
+}
+
 async function fetchTemplate(url) {
   const res = await fetch(url, {
     headers: new Headers({ accept: "text/html" }),
@@ -501,36 +507,14 @@ async function fetchTemplate(url) {
   return res.text();
 }
 
-async function importAndAdoptStyleSheet(shadow, path) {
-  if (!path) return
-
-  const mod = await import(`/.rdom/${path}`, {
-    assert: { type: 'css' }
-  })
-
-  shadow.adoptedStyleSheets.push(mod.default)
-}
-
-function createCustomElementStyleSheet() {
-  const styles = new CSSStyleSheet();
-  styles.replace(":host { display: contents; }")
-  return styles;
-}
-
-// TODO: Get the path from the endpoint attribute instead of hardcoding it.
-const BASE_URL = new URL("/.rdom/", import.meta.url)
-console.warn("BASE_URL", BASE_URL.toString())
-
-function createTemplate(html) {
+function createTemplate(html, baseUrl) {
   const template =
     document
       .createRange()
       .createContextualFragment(`<template>${html}</template>`)
       .firstElementChild;
   for (const link of template.content.querySelectorAll('link')) {
-    const url = new URL(link.getAttribute("href"), BASE_URL)
-    console.warn(url.toString(), BASE_URL.toString())
-    link.setAttribute('href', url)
+    link.setAttribute('href', new URL(link.getAttribute("href"), baseUrl))
   }
   return template
 }
