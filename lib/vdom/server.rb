@@ -124,7 +124,6 @@ module VDOM
 
       CACHE_MAX_AGE = 60 * 60 * 24 * 7
       ASSET_CACHE_CONTROL = "public, max-age=#{CACHE_MAX_AGE}, immutable"
-      # ASSET_CACHE_CONTROL = "no-cache"
 
       def initialize(component:, public_path:)
         @component = component
@@ -184,12 +183,12 @@ module VDOM
         Protocol::HTTP::Response[
           200,
           {
-            "content-type" => asset.content_type,
-            "content-encoding" => asset.content_encoding,
+            "content-type" => asset.content.type,
+            "content-encoding" => asset.content.encoding,
             "cache-control" => ASSET_CACHE_CONTROL,
             **origin_header(request),
           },
-          [asset.content]
+          [asset.content.to_s]
         ]
       end
 

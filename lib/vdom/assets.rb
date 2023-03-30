@@ -3,55 +3,57 @@ require "brotli"
 
 module VDOM
   class Assets
-    ContentHash = Data.define(:type, :content_hash) do
-      def self.[](content) =
-        new(:sha384, Digest::SHA384.digest(content))
+    IntegrityHash = Data.define(:raw, :bitlen) do
+      def self.[](content, bitlen = 256) =
+        new(Digest::SHA2.digest(content, bitlen), bitlen)
 
-      def urlsafe_base64 =
-        Base64.urlsafe_encode64(content_hash, padding: false)
+      def to_s =
+        "sha#{bitlen}-#{base64}"
       def base64 =
-        Base64.strict_encode64(content_hash)
-      def integrity =
-        "#{type}-#{base64}"
+        Base64.strict_encode64(raw)
+      def urlsafe_base64 =
+        Base64.urlsafe_encode64(raw, padding: false)
     end
 
-    EncodedContent = Data.define(:encoding, :content) do
-      def self.[](content, mime_type)
+    EncodedContent = Data.define(:encoding, :to_s) do
+      def self.[](content, mime_type) =
         case mime_type.media_type
         in "text"
           new(:br, Brotli.deflate(content))
         else
           new(nil, content)
         end
-      end
     end
 
-    Asset = Data.define(:filename, :encoded_content, :mime_type, :content_hash) do
+    Content = Data.define(:encoded, :integrity, :mime_type) do
       def self.[](content, mime_type) =
-        ContentHash[content].then do |content_hash|
-          new(
-            "#{content_hash.urlsafe_base64}.#{mime_type.preferred_extension}",
-            EncodedContent[content, mime_type],
-            mime_type,
-            content_hash,
-          )
+        new(
+          EncodedContent[content, mime_type],
+          IntegrityHash[content],
+          mime_type,
+        )
+
+      def encoding =
+        encoded.encoding
+      def to_s =
+        encoded.to_s
+      def type =
+        mime_type.to_s
+      def preferred_extension =
+        mime_type.preferred_extension
+    end
+
+    Asset = Data.define(:filename, :content) do
+      def self.[](content, mime_type) =
+        Content[content, mime_type].then do |content|
+          new(filename_from_content(content), content)
         end
+
+      def self.filename_from_content(content) =
+        "#{content.integrity.urlsafe_base64}.#{content.preferred_extension}"
 
       def path =
         filename
-      def content =
-        encoded_content.content
-      def content_encoding =
-        encoded_content.encoding
-      def content_type =
-        mime_type.to_s
-      def integrity =
-        content_hash.integrity
-
-      def hash =
-        [self.class, content_hash].hash
-      def eql?(other) =
-        other.hash == hash
     end
 
     include Singleton
