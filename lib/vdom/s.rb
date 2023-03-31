@@ -14,8 +14,9 @@ module S
 
   module Utils
     def self.with_fiber_local(name, value)
-      prev, Fiber[name] = Fiber[name], value
-      yield value
+      prev = Fiber[name]
+      Fiber[name] = value
+      yield
     ensure
       Fiber[name] = prev
     end
@@ -83,7 +84,7 @@ module S
     end
 
     def peek
-      update
+      update!
       @value
     end
 
@@ -94,19 +95,15 @@ module S
 
     def value=(value)
       S.batch do
-        unless @value == value
-          @value = value
-          notify(States::Dirty)
-        end
-      ensure
-        mark!(States::Clean)
-      end
+        @value = value
+        notify!(States::Dirty)
+      end unless @value == value
     end
 
-    def update =
+    def update! =
       nil
 
-    def notify(state) =
+    def notify!(state) =
       @condition.signal(state)
 
     def mark!(state) =
@@ -133,13 +130,16 @@ module S
     def initialize(task: Async::Task.current, &compute)
       super()
       @compute = compute
+      @source_location = compute.source_location.join(":")
       @sources = {}
       @state = States::Dirty
       @barrier = Async::Barrier.new(parent: task)
     end
 
+    attr_reader :source_location
+
     def inspect =
-      "#<#{self.class.name} #{@compute.source_location.join(":")} value=#{@value.inspect[0..50]} #@state>"
+      "#<#{self.class.name} #{@source_location} value=#{@value.inspect[0..50]} #@state>"
 
     def stop
       cleanup!
@@ -165,11 +165,13 @@ module S
 
     def create_listener(source) =
       @barrier.async do |subtask|
-        while state = source.wait
+        loop do
+          state = source.wait
+
           next unless @state < state
-          enqueue_effect if clean?
+          enqueue_effect
           mark!(state)
-          notify(States::Check)
+          notify!(States::Check)
         end
       rescue => e
         Console.logger.error(self, e)
@@ -178,17 +180,17 @@ module S
         source.stop_if_empty!
       end
 
-    def update
-      return if clean? or disposed?
+    def update!
+      until clean? or disposed?
+        wait_for_sources if check?
 
-      wait_for_sources if check?
+        if dirty?
+          self.value = call
+        end
 
-      unless dirty?
         mark!(States::Clean)
-        return
+        notify!(States::Clean)
       end
-
-      self.value = call
     end
 
     def wait_for_sources =
@@ -204,11 +206,11 @@ module S
 
       update_sources do
         S.batch do
-          Utils.with_fiber_local(CURRENT_KEY, self) do
-            Reactive.track do
-              @compute.call
-            end
-          end
+          Async do
+            Fiber[CURRENT_KEY] = self
+            Fiber[TRACKING_KEY] = true
+            @compute.call
+          end.wait
         end
       end
     end
@@ -250,7 +252,7 @@ module S
   class Effect < Computed
     def initialize
       super
-      update
+      update!
     end
 
     def enqueue_effect =
@@ -259,6 +261,7 @@ module S
     def dispose!
       @compute = @value = Disposed
       mark!(States::Clean)
+      super()
     end
 
     def stop_if_empty! =
@@ -313,6 +316,13 @@ module S
 
     protected
 
+    def flush! =
+      catch_error do
+        until @queue.empty?
+          @queue.dequeue.peek
+        end
+      end
+
     def cycle
       @level += 1
 
@@ -324,13 +334,6 @@ module S
     ensure
       @level -= 1
     end
-
-    def flush! =
-      catch_error do
-        until @queue.empty?
-          @queue.dequeue.peek
-        end
-      end
 
     def catch_error(error = nil)
       yield
