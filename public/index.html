@@ -60,17 +60,19 @@
         margin: 1rem;
       }
 
-      /* Preferred, https://developer.mozilla.org/en-US/docs/Web/API/CustomStateSet#examples */
-      rdom-embed:--connected,
       /* Fallback, https://caniuse.com/mdn-api_customstateset */
-      rdom-embed.--rdom-connected {
+      rdom-embed.rdom-connected {
         animation: connected 1s normal forwards ease-in-out;
+      }
+      rdom-embed:not(.rdom-connected) {
+        animation: disconnected 1s normal forwards ease-in-out;
       }
 
       /* Preferred, https://developer.mozilla.org/en-US/docs/Web/API/CustomStateSet#examples */
-      rdom-embed:not(:--connected),
-      /* Fallback, https://caniuse.com/mdn-api_customstateset */
-      rdom-embed:not(.--rdom-connected) {
+      rdom-embed:--connected {
+        animation: connected 1s normal forwards ease-in-out;
+      }
+      rdom-embed:not(:--connected) {
         animation: disconnected 1s normal forwards ease-in-out;
       }
     </style>

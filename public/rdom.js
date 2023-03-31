@@ -3,7 +3,7 @@ const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
 const CONNECTED_STATE = "--connected";
-const CONNECTED_CLASS = "--rdom-connected";
+const CONNECTED_CLASS = "rdom-connected";
 
 const STYLESHEETS = {
   root: createStylesheet(`
