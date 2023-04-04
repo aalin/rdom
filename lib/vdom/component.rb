@@ -59,6 +59,8 @@ module VDOM
         instance_eval(code, path.to_s, 1)
     end
 
+    Metadata = Data.define(:name, :path)
+
     class Loader
       include Singleton
 
@@ -88,7 +90,7 @@ module VDOM
 
         name = File.basename(path, ".*").freeze
         component.define_singleton_method(:title) { name }
-        component.const_set(:COMPONENT_META, { name:, path: }.freeze)
+        component.const_set(:COMPONENT_META, Metadata[name, path])
 
         if stylesheet = component.const_get(HamlTransform::STYLES_CONST_NAME)
           Assets.instance.store(stylesheet.asset)

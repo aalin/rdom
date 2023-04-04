@@ -113,17 +113,21 @@ module VDOM
 
       SESSION_ID_HEADER_NAME = "x-rdom-session-id"
 
-      ALLOW_HEADERS = {
+      ALLOW_HEADERS = Ractor.make_shareable({
         "access-control-allow-methods" => "GET, POST, OPTIONS",
         "access-control-allow-headers" => [
           "content-type",
           "accept",
+          "accept-encoding",
           SESSION_ID_HEADER_NAME,
-        ].join(", ").freeze
-      }.freeze
+        ].join(", ")
+      })
 
-      CACHE_MAX_AGE = 60 * 60 * 24 * 7
-      ASSET_CACHE_CONTROL = "public, max-age=#{CACHE_MAX_AGE}, immutable"
+      ASSET_CACHE_CONTROL = [
+        "public",
+        "max-age=#{7 * 24 * 60 * 60}",
+        "immutable",
+      ].join(", ").freeze
 
       def initialize(component:, public_path:)
         @component = component

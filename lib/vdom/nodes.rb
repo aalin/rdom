@@ -81,9 +81,7 @@ module VDOM
 
       def receive(&)
         if block_given?
-          loop do
-            yield(*receive)
-          end
+          yield(*receive) while true
         else
           @incoming.dequeue
         end
@@ -116,7 +114,8 @@ module VDOM
     end
 
     class VNode < Base
-      def generate_id = SecureRandom.alphanumeric(5)
+      def generate_id =
+        SecureRandom.alphanumeric(5)
     end
 
     class VText < VNode
@@ -280,7 +279,8 @@ module VDOM
             refs = diff_refs(refs, new_refs)
           end
         ensure
-          diff_refs(refs, {})
+          refs.values.flatten.each(&:stop)
+          refs.clear
         end
 
         def diff_refs(refs, new_refs)
@@ -491,8 +491,7 @@ module VDOM
         end
 
         def update_attribute(parent_id, ref_id, name, value, &)
-          case value
-          in S::Reactive
+          if value in S::Reactive
             update_reactive(parent_id, ref_id, name, value, &)
           else
             update_static(parent_id, ref_id, name, value, &)

@@ -6,7 +6,7 @@ require_relative "patches"
 
 module VDOM
   class TextDiff
-    ENCODING = "UTF-16LE"
+    ENCODING = Encoding::UTF_16LE
     PACKING = "S*"
 
     def self.diff(node_id, seq1, seq2, &)
@@ -41,7 +41,6 @@ module VDOM
           start = bj
           ax = ai - ais
           bx = bj - bjs
-          count = ax - bx
 
           next yield Patches::DeleteData[
             node_id,
