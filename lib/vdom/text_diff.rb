@@ -50,7 +50,13 @@ module VDOM
         end
 
         deleting = changeset.select(&:deleting?)
-        replacement = adding.map(&:element).flatten.pack(PACKING).force_encoding(ENCODING)
+        replacement =
+          adding
+            .map(&:element)
+            .flatten
+            .pack(PACKING)
+            .force_encoding(ENCODING)
+            .encode("UTF-8")
 
         if deleting.empty?
           next yield Patches::InsertData[
