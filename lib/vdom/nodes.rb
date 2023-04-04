@@ -520,37 +520,40 @@ module VDOM
       end
 
       class VCallback < Base
-        def run(parent_id, ref_id, name, handler)
+        Handler = Data.define(:root, :callback) do
+          def call(payload) =
+            root.batch do
+              S.untrack do
+                callback.call(
+                  **payload.slice(
+                    *extract_kwargs(callback.parameters)
+                  )
+                )
+              end
+            end
+
+          def extract_kwargs(parameters) =
+            parameters.map do |param|
+              if param in [:key | :keyreq, name]
+                name
+              end
+            end.compact
+        end
+
+        def run(parent_id, ref_id, name, callback)
+          root = S::Root.current!
           id = SecureRandom.alphanumeric(32)
 
-          callbacks.store(id, wrap_reactive_root(handler))
+          callbacks.store(id, Handler[root, callback])
 
           patch(Patches::SetHandler[parent_id, ref_id, name, id])
 
           receive do |handler|
-            callbacks.store(id, wrap_reactive_root(handler))
+            callbacks.store(id, Handler[root, callback])
           end
         ensure
           callbacks.delete(id)
           patch(Patches::RemoveHandler[parent_id, ref_id, name, id])
-        end
-
-        def wrap_reactive_root(handler, root = S::Root.current!)
-          lambda do |payload|
-            root.batch do
-              S.untrack do
-                handler.call(**payload.slice(*extract_kwargs(handler.parameters)))
-              end
-            end
-          end
-        end
-
-        def extract_kwargs(parameters)
-          parameters.map do |param|
-            if param in [:key | :keyreq, name]
-              name
-            end
-          end.compact
         end
       end
 
