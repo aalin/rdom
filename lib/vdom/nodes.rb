@@ -124,7 +124,11 @@ module VDOM
         with_text_node(content.to_s) do |id|
           mount_dom_node(id) do
             receive do |new_content|
-              content = update_content(id, content, new_content.to_s)
+              content = update_content(
+                id,
+                content,
+                new_content.to_s
+              )
             end
           end
         end
@@ -134,14 +138,14 @@ module VDOM
 
       def update_content(id, content, new_content)
         if content == new_content
-          return content
+          content
+        else
+          TextDiff.diff(
+            id,
+            content,
+            new_content,
+          ) { patch(_1) }
         end
-
-        TextDiff.diff(
-          id,
-          content,
-          new_content.to_s
-        ) { patch(_1) }
       end
 
       def with_text_node(content, id: generate_id)
@@ -627,7 +631,6 @@ module VDOM
         end
       end
     end
-
 
     class VSlot < Base
       def run(descriptor)

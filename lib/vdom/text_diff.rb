@@ -6,8 +6,14 @@ require_relative "patches"
 
 module VDOM
   class TextDiff
+    ENCODING = "UTF-16LE"
+    PACKING = "S*"
+
     def self.diff(node_id, seq1, seq2, &)
       # This method is inspired by Diff::LCS.patch().
+
+      seq1 = seq1.encode(ENCODING).unpack(PACKING)
+      seq2 = seq2.encode(ENCODING).unpack(PACKING)
 
       ai = 0
       bj = 0
@@ -45,7 +51,7 @@ module VDOM
         end
 
         deleting = changeset.select(&:deleting?)
-        replacement = adding.map(&:element).join
+        replacement = adding.map(&:element).flatten.pack(PACKING).force_encoding(ENCODING)
 
         if deleting.empty?
           next yield Patches::InsertData[
@@ -63,7 +69,7 @@ module VDOM
         ]
       end
 
-      seq2
+      [*seq2].pack(PACKING).force_encoding(ENCODING)
     end
   end
 end
