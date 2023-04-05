@@ -6,14 +6,17 @@ require_relative "patches"
 
 module VDOM
   class TextDiff
-    ENCODING = Encoding::UTF_16LE
-    PACKING = "S*"
+    DOCUMENT_ENCODING = Encoding::UTF_16LE
+    INTERNAL_ENCODING = Encoding::UTF_8
+    # https://docs.ruby-lang.org/en/master/packed_data_rdoc.html#label-16-Bit+Integer+Directives
+    PACKING = "v*"
 
-    def self.diff(node_id, seq1, seq2, &)
-      # This method is inspired by Diff::LCS.patch().
-
-      seq1 = seq1.encode(ENCODING).unpack(PACKING)
-      seq2 = seq2.encode(ENCODING).unpack(PACKING)
+    # This method is inspired by Diff::LCS.patch()
+    def self.diff(node_id, str1, str2, &)
+      str1 = str1.encode(DOCUMENT_ENCODING)
+      str2 = str2.encode(DOCUMENT_ENCODING)
+      seq1 = str1.unpack(PACKING)
+      seq2 = str2.unpack(PACKING)
 
       ai = 0
       bj = 0
@@ -50,13 +53,12 @@ module VDOM
         end
 
         deleting = changeset.select(&:deleting?)
-        replacement =
-          adding
-            .map(&:element)
-            .flatten
-            .pack(PACKING)
-            .force_encoding(ENCODING)
-            .encode("UTF-8")
+
+        replacement = adding
+          .map(&:element)
+          .flatten
+          .pack(PACKING, buffer: String.new(encoding: DOCUMENT_ENCODING))
+          .encode(INTERNAL_ENCODING)
 
         if deleting.empty?
           next yield Patches::InsertData[
@@ -74,7 +76,16 @@ module VDOM
         ]
       end
 
-      [*seq2].pack(PACKING).force_encoding(ENCODING)
+      str2
+    rescue Encoding::InvalidByteSequenceError => e
+      Console.logger.error(self, "Handled #{e.inspect}")
+
+      yield Patches::SetTextContent[
+        node_id,
+        str2.encode(INTERNAL_ENCODING)
+      ]
+
+      str2
     end
   end
 end
