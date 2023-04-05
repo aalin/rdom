@@ -520,15 +520,23 @@ module VDOM
       end
 
       class VCallback < Base
-        Handler = Data.define(:root, :callback) do
+        Handler = Data.define(:id, :root, :callback) do
+          def self.[](callback, root: S::Root.current!) =
+            new(generate_id, root, callback)
+
+          def self.generate_id =
+            SecureRandom.alphanumeric(32)
+
           def call(payload) =
-            root.batch do
-              S.untrack do
-                callback.call(
-                  **payload.slice(
-                    *extract_kwargs(callback.parameters)
+            root.async do
+              root.batch do
+                S.untrack do
+                  callback.call(
+                    **payload.slice(
+                      *extract_kwargs(callback.parameters)
+                    )
                   )
-                )
+                end
               end
             end
 
@@ -541,19 +549,19 @@ module VDOM
         end
 
         def run(parent_id, ref_id, name, callback)
-          root = S::Root.current!
-          id = SecureRandom.alphanumeric(32)
+          handler = Handler[callback]
+          callbacks.store(handler.id, handler)
 
-          callbacks.store(id, Handler[root, callback])
+          patch(Patches::SetHandler[parent_id, ref_id, name, handler.id])
 
-          patch(Patches::SetHandler[parent_id, ref_id, name, id])
-
-          receive do |handler|
-            callbacks.store(id, Handler[root, callback])
+          receive do |callback|
+            next if handler.callback == callback
+            handler = handler.with(callback:)
+            callbacks.store(handler.id, handler)
           end
         ensure
-          callbacks.delete(id)
-          patch(Patches::RemoveHandler[parent_id, ref_id, name, id])
+          callbacks.delete(handler.id)
+          patch(Patches::RemoveHandler[parent_id, ref_id, name, handler.id])
         end
       end
 
