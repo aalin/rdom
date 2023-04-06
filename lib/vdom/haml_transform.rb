@@ -46,7 +46,7 @@ module VDOM
       attr_reader :slots
     end
 
-    Tag = Data.define(:name, :key, :attrs, :props, :children) do
+    Tag = Data.define(:name, :key, :slot, :attrs, :props, :children) do
       def to_s
         "<#{name}#{attrs.map { format(' %s="%s"', _1.to_s.tr("_", "-"), _2) }.join}>#{children.join}</#{name}>"
       end
@@ -246,6 +246,12 @@ module VDOM
           Args([Int(id.to_s)]),
         ),
         BareAssocHash([
+          if slot = element.root.slot
+            Assoc(
+              Label("slot:"),
+              StringLiteral([TStringContent(slot.to_s)], "'")
+            )
+          end,
           build_slots_assoc(element.slots),
           build_refs_assoc(element.refs),
           if key = element.root.key
@@ -275,6 +281,8 @@ module VDOM
         name:, attributes:, dynamic_attributes:, value:, parse:, object_ref:
       }
 
+      slot = attributes.delete("slot") || attributes.delete("id")
+
       if object_ref in String
         key = parse_ruby(object_ref, fix: false)
       end
@@ -295,6 +303,7 @@ module VDOM
         return Tag[
           name,
           key,
+          slot,
           attributes,
           dynamic_attributes,
           [
@@ -310,6 +319,7 @@ module VDOM
         return Tag[
           name,
           key,
+          slot,
           attributes,
           dynamic_attributes,
           [value].compact
@@ -319,6 +329,7 @@ module VDOM
       Tag[
         name,
         key,
+        slot,
         attributes,
         dynamic_attributes,
         map_children(custom_element, node.children)
@@ -344,7 +355,7 @@ module VDOM
     def create_slot(custom_element, children)
       slot = Slot["slot#{custom_element.slots.size}", children]
       custom_element.slots.push(slot)
-      Tag[:slot, nil, { data_rdom_slot: slot.name }, {}, []]
+      Tag[:slot, nil, slot, { data_rdom_slot: slot.name }, {}, []]
     end
 
     def parse_ruby(code, fix: true)
@@ -442,9 +453,23 @@ module VDOM
 
       args = [
         VarRef(Const(name.to_s)),
-        unless parse
-          StringLiteral([TStringContent(value)], "'")
+        if value
+          if parse
+            parse_ruby(object_ref, fix: false)
+          else
+            StringLiteral([TStringContent(value.to_s)], "'")
+          end
         end,
+        node[:children].map do
+          case _1
+          in { type: :tag } => tag
+            build_custom_element(tag)
+          in { type: :script } => script
+            build_script(custom_element, script)
+          else
+            map_children(custom_element, [_1])
+          end
+        end.flatten,
         BareAssocHash([
           if key
             Assoc(
@@ -455,8 +480,8 @@ module VDOM
           unless props.empty?
             AssocSplat(build_props(props))
           end,
-        ].compact),
-      ]
+        ].flatten.compact),
+      ].flatten.compact
 
       [ARef(VarRef(Const("H")), Args(args))]
     end
