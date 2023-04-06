@@ -263,7 +263,7 @@ module VDOM
               slot.resume(descriptor)
               [name, slot]
             else
-              [name, VSlotted.start(parent.dom_id, name, descriptor)]
+              [name, VChildren.start(parent.dom_id, name, descriptor)]
             end
           end.to_h
         ensure
@@ -326,7 +326,7 @@ module VDOM
       end
     end
 
-    class VSlotted < VNode
+    class VChildren < VNode
       class UpdateOrder < VNode
         def run(parent_id, slot_name, children)
           order = []
@@ -763,7 +763,7 @@ module VDOM
       def run(children = nil)
         patch(Patches::CreateRoot[])
 
-        VSlotted.run(nil, "children", children) do |vslotted|
+        VChildren.run(nil, "children", children) do |vslotted|
           receive do |children|
             vslotted.resume(children)
           end
