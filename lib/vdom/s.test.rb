@@ -34,6 +34,9 @@ describe "Signals" do
         S.root do
           super(&block)
         end.wait
+      rescue => e
+        Console.logger.error(self, e)
+        raise
       ensure
         task.stop
       end.wait
