@@ -177,7 +177,7 @@ module VDOM
         # so we can use self.props inside initialize.
         instance.instance_variable_set(:@props, descriptor.props)
 
-        S.root do
+        S.root(name: descriptor.type.display_name) do
           instance.send(:initialize, **descriptor.props)
 
           yield_self do |vcomponent|
@@ -208,7 +208,7 @@ module VDOM
               end
             end
           end
-        end
+        end.wait
       end
 
       def group_descriptors_by_slots(descriptors)
@@ -499,13 +499,13 @@ module VDOM
         end
 
         def update_reactive(parent_id, ref_id, name, signal, &)
-          sub = signal.subscribe do |value|
+          sub = signal.subscribe(name: "attribute: #{parent_id}.#{ref_id}.#{name}") do |value|
             update_static(parent_id, ref_id, name, value)
           end
 
           yield
         ensure
-          sub.stop
+          sub&.stop
         end
 
         def update_static(parent_id, ref_id, name, value, &)
