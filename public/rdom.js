@@ -1,4 +1,3 @@
-const ELEMENT_NAME = "rdom-embed";
 const DEFAULT_ENDPOINT = "/.rdom";
 const SESSION_ID_HEADER = "x-rdom-session-id";
 const STREAM_MIME_TYPE = "x-rdom/json-stream";
@@ -30,8 +29,8 @@ const STYLESHEETS = {
 };
 
 customElements.define(
-  ELEMENT_NAME,
-  class VDOMRoot extends HTMLElement {
+  'rdom-embed',
+  class RDOMEmbedElement extends HTMLElement {
     #internals;
 
     constructor() {
@@ -548,6 +547,11 @@ class RDOMElement extends HTMLElement {
   }
 }
 
+RDOMElement.define(
+  'rdom-root',
+  createTemplate('<slot data-rdom-slot="children"></slot>')
+)
+
 function createStylesheet(source) {
   const styles = new CSSStyleSheet();
   styles.replace(source);
@@ -561,7 +565,7 @@ async function fetchTemplate(url) {
   return res.text();
 }
 
-function createTemplate(html, baseUrl) {
+function createTemplate(html, baseUrl = undefined) {
   const template = document
     .createRange()
     .createContextualFragment(`<template>${html}</template>`).firstElementChild;

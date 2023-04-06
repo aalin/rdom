@@ -760,15 +760,7 @@ module VDOM
         patch(Patches::RemoveChild[nil, id])
       end
 
-      RootElement = CustomElement[
-        "rdom-root",
-        %{<slot data-rdom-slot="children"></slot>},
-        nil
-      ]
-
       def run(children = nil)
-        register_custom_element(RootElement)
-
         patch(Patches::CreateRoot[])
 
         VSlotted.run(nil, "children", children) do |vslotted|
