@@ -9,6 +9,10 @@ module VDOM
       node.copy(target: visit(node.target), value: visit(node.value))
     end
 
+    def visit_unary(node)
+      node.copy(statement: visit(node.statement))
+    end
+
     def visit_opassign(node)
       node.copy(target: visit(node.target), value: visit(node.value))
     end
