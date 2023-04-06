@@ -90,6 +90,7 @@ module VDOM
 
         name = File.basename(path, ".*").freeze
         component.define_singleton_method(:title) { name }
+        component.define_singleton_method(:display_name) { name }
         component.const_set(:COMPONENT_META, Metadata[name, path])
 
         if stylesheet = component.const_get(HamlTransform::STYLES_CONST_NAME)

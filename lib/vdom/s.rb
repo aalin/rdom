@@ -12,11 +12,19 @@ module S
   class CycleDetectedError < StandardError
   end
 
+  module AsyncRefinements
+    refine Async::Condition do
+      def size = @waiting.size
+    end
+  end
+
+  using AsyncRefinements
+
   module Utils
     def self.with_fiber_local(name, value)
       prev = Fiber[name]
       Fiber[name] = value
-      yield
+      yield value
     ensure
       Fiber[name] = prev
     end
@@ -49,13 +57,24 @@ module S
     def self.current_tracking =
       (current if tracking?)
 
-    def initialize =
+    def initialize(name: nil)
+      @name = name
       @condition = Async::Condition.new
+    end
+
+    attr_reader :name
 
     def to_s =
       @value.to_s
+
     def inspect =
-      "#<#{self.class.name} value=#{@value.inspect[0..50]} #{@state}>"
+      [
+        self.class.name,
+        "name=#{@name.inspect}",
+        "subscribers=#{@condition.size}",
+        "value=#{@value.inspect}",
+        @state
+      ].join(" ").prepend("#<").concat(">")
 
     def wait =
       @condition.wait
@@ -69,8 +88,8 @@ module S
     def dirty? =
       @state == States::Dirty
 
-    def subscribe(&) =
-      S.effect do
+    def subscribe(name: caller.first, &) =
+      S.effect(name:) do
         value = self.value
 
         Reactive.untrack do
@@ -113,8 +132,8 @@ module S
   end
 
   class Signal < Reactive
-    def initialize(value)
-      super()
+    def initialize(value, name:)
+      super(name:)
       @state = States::Clean
       @value = value
     end
@@ -124,30 +143,24 @@ module S
 
   class Computed < Reactive
     Disposed = Data.define do
-      def self.inspect = "☠️ "
+      def self.inspect = "❌"
     end
 
-    def initialize(task: Async::Task.current, &compute)
-      super()
+    def initialize(name: compute.source_location.join(":"), task: Async::Task.current, &compute)
+      super(name:)
+      @root = Root.current!
       @compute = compute
-      @source_location = compute.source_location.join(":")
       @sources = {}
       @state = States::Dirty
       @barrier = Async::Barrier.new(parent: task)
     end
-
-    attr_reader :source_location
-
-    def inspect =
-      "#<#{self.class.name} #{@source_location} value=#{@value.inspect[0..50]} #@state>"
 
     def stop
       cleanup!
     ensure
       dispose!
       @barrier.stop
-      @sources.each_key(&:stop_if_empty!)
-      @sources.clear
+      @sources.each_key(&:stop_if_empty!).clear
     end
 
     def disposed? =
@@ -167,14 +180,11 @@ module S
       @barrier.async do |subtask|
         loop do
           state = source.wait
-
           next unless @state < state
-          enqueue_effect
+          enqueue_effect if clean?
           mark!(state)
           notify!(States::Check)
         end
-      rescue => e
-        Console.logger.error(self, e)
       ensure
         @sources.delete_if { _1 == source && _2 == subtask }
         source.stop_if_empty!
@@ -201,9 +211,7 @@ module S
         nil
       end
 
-    def call
-      return if disposed?
-
+    def call =
       update_sources do
         S.batch do
           Async do
@@ -213,26 +221,10 @@ module S
           end.wait
         end
       end
-    end
-
-    def cleanup!
-      if @value in Proc => value
-        @value = nil
-
-        S.batch do
-          Reactive.untrack do
-            value.call
-          end
-        rescue => e
-          Console.logger.error(self, e)
-          stop
-          raise
-        end
-      end
-    end
 
     def update_sources =
       @sources.values.then do |old_listeners|
+        # start_cleanup_task
         @sources.clear
         cleanup!
         yield unless disposed?
@@ -240,37 +232,57 @@ module S
         old_listeners.each(&:stop)
       end
 
+    def cleanup! =
+      if @value in Proc => cleanup
+        @value = nil
+
+        S.batch do
+          Reactive.untrack do
+            cleanup.call
+          end
+        rescue => e
+          Console.logger.error(self, e)
+          stop
+          raise
+        end
+      end
+
     def dispose!
       @value = nil
       mark!(States::Dirty)
     end
 
-    def enqueue_effect
-    end
+    def enqueue_effect =
+      nil
   end
 
   class Effect < Computed
-    def initialize
-      super
+    def initialize(...)
+      super(...)
       update!
     end
 
-    def enqueue_effect =
-      Root.current!.enqueue(self)
+    protected
+
+    def stop_if_empty! =
+      nil
 
     def dispose!
       @compute = @value = Disposed
       mark!(States::Clean)
-      super()
     end
 
-    def stop_if_empty! =
-      nil
+    def enqueue_effect =
+      @root&.enqueue(self)
   end
 
   class Root
     CYCLE_LIMIT = 50
     CURRENT_KEY = :S_Root_current
+
+    def inspect
+      "#<#{self.class.name}##{object_id} #{@name} empty?=#{@barrier.empty?} #{@barrier.tasks.size}>"
+    end
 
     def self.current =
       Fiber[CURRENT_KEY]
@@ -280,35 +292,43 @@ module S
     def self.with(root, &) =
       Utils.with_fiber_local(CURRENT_KEY, root, &)
 
-    def self.run(&) =
-      Async do |task|
-        with(new) do |root|
-          yield root
-        ensure
-          root.stop
-        end
+    def self.run(name: caller.first, task: Async::Task.current, &) =
+      task.async do
+        root = new(name:, task: _1)
+        puts "\e[32mStarted root #{root.object_id}\e[0m"
+        Fiber[CURRENT_KEY] = root
+        yield
       ensure
-        task.stop
-      end
+        root.stop
+        puts "\e[31mStopped root #{root&.object_id}\e[0m"
+      end.wait
 
-    def initialize(task: Async::Task.current)
+    def initialize(name:, task: Async::Task.current)
+      @name = name
       @barrier = Async::Barrier.new(parent: task)
       @queue = Async::Queue.new(parent: @barrier)
       @level = 0
     end
 
-    def stop =
+    def running? =
+      !@barrier.empty?
+
+    def async(&) =
+      @barrier.async(&)
+
+    def stop
+      @queue.dequeue until @queue.empty?
+      @queue = nil
       @barrier.stop
+    end
 
     def enqueue(effect) =
       @queue.enqueue(effect)
 
     def batch(&) =
-      Root.with(self) do
+      self.class.with(self) do
         cycle do |level|
-          @barrier.async do |task|
-            yield self
-          end.wait
+          yield self
         ensure
           flush! if level == 1
         end
@@ -346,13 +366,93 @@ module S
     end
   end
 
+  class Exporter
+    module Formats
+      module Mermaid
+        def init =
+          "flowchart LR"
+
+        def label(node) =
+          "    #{node_id(node)}[#{escape(node.inspect)}]"
+        def link(source, target) =
+          "    #{node_id(source)} --> #{node_id(target)}"
+        def link_dotted(source, target) =
+          "    #{node_id(source)} -.-> #{node_id(target)}"
+
+        def escape(str) =
+          str
+            .gsub("#", "#35;")
+            .gsub('"', "#34;")
+            .gsub("<", "#lt;")
+            .gsub(">", "#gt;")
+            .inspect
+      end
+
+      module D2
+        def init =
+          nil
+        def label(node) =
+          "#{node_id(node)}: #{node.inspect.inspect}"
+        def link(source, target) =
+          "#{node_id(source)} -> #{node_id(target)}"
+        def link_dotted(source, target) =
+          "#{node_id(source)} -> #{node_id(target)}"
+      end
+    end
+
+    def self.export(format) =
+      StringIO.new.tap do |out|
+        new(out, format).tap do |exporter|
+          if init = exporter.init
+            out.puts(init)
+          end
+          ObjectSpace.each_object(Root) { exporter.visit(_1) }
+          ObjectSpace.each_object(Reactive) { exporter.visit(_1) }
+        end
+        out.rewind
+      end.read
+
+    def initialize(out, format)
+      extend format
+
+      @out = out
+      @visited = Set.new
+    end
+
+    def visit(node) =
+      if @visited.add?(node)
+        @out.puts(label(node))
+
+        case node
+        in Root
+        in Signal
+        in Computed
+          if root = node.instance_variable_get(:@root)
+            visit(root)
+            @out.puts(link_dotted(node, root))
+          end
+          node.instance_variable_get(:@sources).each_key do |source|
+            visit(source)
+            @out.puts(link(source, node))
+          end
+        end
+      end
+
+    private
+
+    def node_id(node) =
+      "#{node.class.name.split("::").last.downcase}#{node.object_id}"
+  end
+
   module Helpers
-    def root(&) = Root.run(&)
+    def root(name: caller.first, task: Async::Task.current, &) =
+      Root.run(name:, task:, &)
+
     def batch(&) = Root.current!.batch(&)
 
-    def signal(value) = Signal.new(value)
-    def computed(&) = Computed.new(&)
-    def effect(&) = Effect.new(&)
+    def signal(value, name: caller.first) = Signal.new(value, name:)
+    def computed(name: caller.first, &) = Computed.new(name:, &)
+    def effect(name: caller.first, &) = Effect.new(name:, &)
 
     def tracking? = Reactive.tracking?
     def track(&) = Reactive.track(&)
