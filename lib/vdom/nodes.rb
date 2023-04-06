@@ -656,19 +656,19 @@ module VDOM
     end
 
     class VReactive < Base
-      def run(signal)
-        VAny.run(Descriptor.normalize_children(signal.peek)) do |vnode|
-          sub = signal.subscribe do |value|
+      def run(reactive)
+        VAny.run(Descriptor.normalize_children(reactive.peek)) do |vnode|
+          sub = reactive.subscribe(name: "VReactive##{object_id}") do |value|
             vnode.resume(Descriptor.normalize_children(value))
           end
 
-          receive do |new_signal|
-            unless signal == new_signal
-              raise "Signal changed!"
+          receive do |new_reactive|
+            unless reactive == new_reactive
+              raise "Reactive changed!"
             end
           end
         ensure
-          sub.stop
+          sub&.stop
         end
       end
     end
