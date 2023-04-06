@@ -1,0 +1,41 @@
+:ruby
+  def initialize(open: false, **) =
+    @open = open
+
+  def handle_toggle(**) =
+    @open = !@open
+
+%details(open=@open){ontoggle: method(:handle_toggle)}
+  %summary
+    %slot(name="summary")
+  = if @open
+    %div
+      %slot
+  = unless @open
+    %div
+      %p Loading…
+:css
+  details {
+    border: 1px solid #0003;
+    border-radius: 2px;
+    transition: background .2s;
+    background: #0002;
+    margin: 1em 0;
+  }
+  details[open] {
+    background: #0001;
+  }
+  summary {
+    user-select: none;
+    cursor: pointer;
+    font-size: 1.2em;
+    font-weight: bold;
+    padding: .5em;
+  }
+  summary:hover {
+    text-decoration: underline;
+  }
+  div {
+    margin: 1em;
+    margin-top: 0;
+  }

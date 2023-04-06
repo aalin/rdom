@@ -1,5 +1,6 @@
 :ruby
   Sample = Data.define(:time, :data)
+  Details = import("./Details.haml")
 
   def initialize(**)
     @b = {}
@@ -70,23 +71,58 @@
         .entry[k]
           %dt= k
           %dd= v
-  %google-chart(type="line"){
-    data: JSON.generate(build_table(@i)),
-    options: JSON.generate(
-      hAxis: { title: "Time" },
-      vAxis: { title: "Count" },
-      legend: { position: "bottom" },
-      crosshair: {
-        color: "#000",
-        trigger: "selection"
-      },
-      axes: {
-        x: { 0 => { side: "bottom" } }
-      }
-    )
-  }
+  %Details
+    %span#summary D2 graph
+    %div
+      %p
+        Paste this on&nbsp;
+        %a(href="https://play.d2lang.com/" target="_blank")< https://play.d2lang.com
+      %pre(tabindex="0")
+        = S::Exporter.export(S::Exporter::Formats::D2)
+  %Details
+    %span#summary Mermaid graph
+    %div
+      %p
+        Paste this on&nbsp;
+        %a(href="https://mermaid.live/" target="_blank")< https://mermaid.live/
+      %pre(tabindex="0")
+        = S::Exporter.export(S::Exporter::Formats::Mermaid)
+  %Details
+    %span#summary Charts
+    %google-chart(type="line"){
+      data: JSON.generate(build_table(@i)),
+      options: JSON.generate(
+        hAxis: { title: "Time" },
+        vAxis: { title: "Count" },
+        legend: { position: "bottom" },
+        crosshair: {
+          color: "#000",
+          trigger: "selection"
+        },
+        axes: {
+          x: { 0 => { side: "bottom" } }
+        }
+      )
+    }
 
 :css
+  pre {
+    border: 1px solid #0003;
+    border-radius: 2px;
+    line-height: 1.5em;
+    font-size: 1.2em;
+    padding: 1em;
+    background: #0003;
+    user-select: all;
+    white-space: pre-wrap;
+  }
+
+  pre:focus {
+    background: #00f3;
+    outline: 1px dashed #00f;
+    border-color: #00f3;
+  }
+
   dl {
     columns: 16em auto;
     font-family: monospace;
@@ -101,7 +137,7 @@
   dt {
     font-weight: bold;
   }
-  dl {
+  dd {
     text-align: right;
   }
 
